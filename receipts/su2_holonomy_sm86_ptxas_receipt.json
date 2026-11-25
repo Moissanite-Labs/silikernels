@@ -1,0 +1,297 @@
+{
+  "all_zero_spill": true,
+  "arch": "sm_86",
+  "compile_flags": "-O3 -std=c++17 -arch=sm_86 --ptxas-options=-v --shared -Xcompiler -fPIC",
+  "kernel_count": 27,
+  "kernels": [
+    {
+      "barriers": 0,
+      "cmem_bytes": 416,
+      "registers": 45,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8637holosphere_hopf_s3_cayley2x2_bwd_sm86I13__nv_bfloat16EEvPKvS3_S3_S3_PvS4_S4_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 392,
+      "registers": 23,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8637holosphere_hopf_s3_cayley2x2_fwd_sm86I13__nv_bfloat16EEvPKvS3_S3_Pvl"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 416,
+      "registers": 46,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8637holosphere_hopf_s3_cayley2x2_bwd_sm86IfEEvPKvS2_S2_S2_PvS3_S3_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 392,
+      "registers": 25,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8637holosphere_hopf_s3_cayley2x2_fwd_sm86IfEEvPKvS2_S2_Pvl"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 400,
+      "registers": 30,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8629holosphere_cayley2x2_bwd_sm86I13__nv_bfloat16EEvPKvS3_S3_PvS4_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 384,
+      "registers": 22,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8629holosphere_cayley2x2_fwd_sm86I13__nv_bfloat16EEvPKvS3_Pvl"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 400,
+      "registers": 31,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8629holosphere_cayley2x2_bwd_sm86IfEEvPKvS2_S2_PvS3_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 384,
+      "registers": 22,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8629holosphere_cayley2x2_fwd_sm86IfEEvPKvS2_Pvl"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 532,
+      "registers": 56,
+      "smem_bytes": 1920,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_bwd_sm86I13__nv_bfloat16Lb1EEEvPKvPK6float4S3_S3_S3_S6_S3_S3_S3_PvS7_S7_S7_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 492,
+      "registers": 40,
+      "smem_bytes": 2176,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_fwd_sm86I13__nv_bfloat16Lb1EEEvPKvS3_S3_S3_P6float4PvS6_S6_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 532,
+      "registers": 61,
+      "smem_bytes": 1920,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_bwd_sm86IfLb1EEEvPKvPK6float4S2_S2_S2_S5_S2_S2_S2_PvS6_S6_S6_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 492,
+      "registers": 38,
+      "smem_bytes": 2176,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_fwd_sm86IfLb1EEEvPKvS2_S2_S2_P6float4PvS5_S5_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 532,
+      "registers": 48,
+      "smem_bytes": 1920,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_bwd_sm86I13__nv_bfloat16Lb0EEEvPKvPK6float4S3_S3_S3_S6_S3_S3_S3_PvS7_S7_S7_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 492,
+      "registers": 40,
+      "smem_bytes": 2176,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_fwd_sm86I13__nv_bfloat16Lb0EEEvPKvS3_S3_S3_P6float4PvS6_S6_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 532,
+      "registers": 53,
+      "smem_bytes": 1920,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_bwd_sm86IfLb0EEEvPKvPK6float4S2_S2_S2_S5_S2_S2_S2_PvS6_S6_S6_iiillllllfif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 492,
+      "registers": 38,
+      "smem_bytes": 2176,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635su2_holonomy_scan_qkv_bhtd_fwd_sm86IfLb0EEEvPKvS2_S2_S2_P6float4PvS5_S5_iiillllllfif"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 432,
+      "registers": 55,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8640fused_spherical_slerp_hopf_bwd_bf16_sm86EPKvS1_PK6float4S1_PvS5_Pfiiffff"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 408,
+      "registers": 40,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8640fused_spherical_slerp_hopf_fwd_bf16_sm86EPKvS1_PK6float4Pviiffff"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 400,
+      "registers": 26,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8631siliquant_a16_dequant_hopf_sm86EPKtPKfP6float4Pjlff"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 400,
+      "registers": 28,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8625hopf_s3_residual_bwd_sm86EPK6float4S2_S2_PS0_S3_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 384,
+      "registers": 21,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8625hopf_s3_residual_fwd_sm86EPK6float4S2_PS0_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 432,
+      "registers": 56,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635fused_spherical_slerp_hopf_bwd_sm86EPK6float4S2_S2_S2_PS0_S3_Pfiiffff"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 408,
+      "registers": 48,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8635fused_spherical_slerp_hopf_fwd_sm86EPK6float4S2_S2_PS0_iiffff"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 400,
+      "registers": 23,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8624su2_untransport_bwd_sm86EPK6float4S2_S2_PS0_S3_l"
+    },
+    {
+      "barriers": 0,
+      "cmem_bytes": 384,
+      "registers": 20,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8624su2_untransport_fwd_sm86EPK6float4S2_PS0_l"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 472,
+      "registers": 39,
+      "smem_bytes": 108,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8630su2_holonomy_scan_qkv_bwd_sm86EPKfPK6float4S4_S4_S4_S4_S4_S4_S4_PfPS2_S6_S6_ifif"
+    },
+    {
+      "barriers": 1,
+      "cmem_bytes": 432,
+      "registers": 34,
+      "smem_bytes": 144,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN15silisphere_sm8630su2_holonomy_scan_qkv_fwd_sm86EPKfPK6float4S4_S4_PS2_S5_S5_S5_ifif"
+    }
+  ],
+  "nvcc_release": "Cuda compilation tools, release 13.4, V13.4.92",
+  "ptx_diagnostics": {
+    "ld_local": 0,
+    "st_local": 0,
+    "visible_entries": 27
+  },
+  "receipt_sha256": "e67b11517ea0bdfd8d84e744114ecb19f008599328eec79a1a688591a1b1c673",
+  "sass_diagnostics": {
+    "FFMA": 3324,
+    "LDG_E_128": 103,
+    "LDL": 0,
+    "SHFL": 323,
+    "STG_E_128": 41,
+    "STL": 0
+  },
+  "schema": "silikernels.sm86.ptxas_sass_receipt.v1",
+  "source_file": "cuda/sm86/su2_holonomy_scan_sm86.cu",
+  "source_sha256": "8171710f675fbc0fa5e5f723c5a3d127a4918ab69e0b876134bec7c106f77155",
+  "zero_spill_kernels": 27
+}
