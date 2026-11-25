@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  cpu-build-and-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Leak & hygiene check
+        run: |
+          if grep -rnE '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}' cuda/ cpu/ receipts/ lean/ README.md Makefile; then
+            echo "ERROR: leak detected" >&2
+            exit 1
+          fi
+          echo "HYGIENE_PASS=1"
+
+      - name: Compile portable & AVX-512 C targets
+        run: |
+          mkdir -p build
+          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -fopenmp -shared -fPIC cpu/avx512/qwen25_avx512_a16_engine.c -lm -o build/libqwen25_avx512_a16_engine.so
+          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -fopenmp cpu/avx512/aletheion_avx512_a16_decoder.c -lm -o build/aletheion_avx512_a16_decoder
+          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -pthread cpu/avx512/s71_proximity_bench.c -lm -o build/s71_proximity_bench
+          gcc -O3 cpu/avx512/hf_reference_avx512_a16_blockh4.c -lm -o build/hf_reference_avx512_a16_blockh4
+          ./build/hf_reference_avx512_a16_blockh4

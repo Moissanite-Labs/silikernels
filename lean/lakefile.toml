@@ -1,0 +1,5 @@
+name = "proximity_barrier_silicon"
+defaultTargets = ["ProximityBarrierSilicon"]
+
+[[lean_lib]]
+name = "ProximityBarrierSilicon"
