@@ -187,3 +187,5 @@ check-avx2-smoke: $(BUILD)/libe8had_simd.so $(BUILD)/libe8_stage1.so \
 
 clean:
 	rm -rf ./build
+
+include cpu/avx512/holosphere_v3_avx512.mk
