@@ -1,38 +1,50 @@
 {
-  "schema": "holosphere.track_s117.live_v2_16warp_d512.v1",
-  "device": "NVIDIA GeForce RTX 3080 Laptop GPU",
-  "sm_count": 48,
-  "config": {"B": 1, "L": 12, "d_model": 512, "warps_per_cta": 16, "ctas": 1, "lm_head_vram_bytes": 0},
   "cellop_only_12L_d512": {
-    "t2048_us_per_tok": 26.9690,
-    "t2048_mj_per_tok": 1.12337,
-    "t8192_us_per_tok": 26.2293,
-    "t8192_mj_per_tok": 1.04936,
-    "speedup_vs_s116_2cta_68_22us": 2.6009
+    "speedup_vs_s116_2cta_68_22us": 2.603,
+    "t2048_mj_per_tok": 1.17523,
+    "t2048_us_per_tok": 27.2267,
+    "t8192_mj_per_tok": 1.40102,
+    "t8192_us_per_tok": 26.2082
   },
+  "config": {
+    "B": 1,
+    "L": 12,
+    "ctas": 1,
+    "d_model": 512,
+    "lm_head_vram_bytes": 0,
+    "warps_per_cta": 16
+  },
+  "cu_rel": "cuda/sm86/holosphere_h256_chunk32_sm86.cu",
+  "cu_sha256": "ade82cc9fb7c7196c34bb6ecadeaf521bfe17db9b1e37197a768e3b2e52b6af5",
+  "device": "NVIDIA GeForce RTX 3080 Laptop GPU",
   "full_e2e_fwht256_12L_d512": {
-    "t2048_us_per_tok": 27.4260,
-    "t2048_mj_per_tok": 1.32328,
-    "t8192_us_per_tok": 27.4252,
-    "t8192_mj_per_tok": 0.98871,
-    "t2048_l2pin_us_per_tok": 27.4230,
-    "t2048_l2pin_mj_per_tok": 1.38542,
-    "fwht_lm_head_overhead_us": 1.1958,
-    "speedup_vs_v1_249_32us": 9.0910,
-    "speedup_vs_s116_2cta_68_22us": 2.4875
+    "fwht_lm_head_overhead_us": 1.1997,
+    "speedup_vs_s116_2cta_68_22us": 2.4891,
+    "speedup_vs_v1_249_32us": 9.0967,
+    "t2048_l2pin_mj_per_tok": 1.10913,
+    "t2048_l2pin_us_per_tok": 27.407,
+    "t2048_mj_per_tok": 1.14964,
+    "t2048_us_per_tok": 27.4086,
+    "t8192_mj_per_tok": 1.10319,
+    "t8192_us_per_tok": 27.4079
   },
   "fwht256_bent4_lm_head_parity": {
-    "max_abs_err_vs_fp64_dense": 1.83181755e-07,
-    "argmax_byte_exact": true
+    "argmax_byte_exact": true,
+    "max_abs_err_vs_fp64_dense": 1.83181755e-07
   },
   "live_sys_ber_canary_v2": {
     "clean_canary_count": 0,
-    "sec16_canary_count": 16,
-    "sec16_hidden_max_abs_diff": 0.000000000000e+00,
-    "sec16_logits_max_abs_diff": 0.000000000000e+00,
-    "sec16_out_byte_bit_exact": true,
     "ded1_canary_count": 1,
-    "ded1_flagged_no_silent_miscorrect": true
+    "ded1_flagged_no_silent_miscorrect": true,
+    "sec16_canary_count": 16,
+    "sec16_hidden_max_abs_diff": 0.0,
+    "sec16_logits_max_abs_diff": 0.0,
+    "sec16_out_byte_bit_exact": true
   },
-  "temp_after_c": 62
+  "mlos_zone_b_receipt_file": "receipts/mlos_zone_b_s117_v2_d512.json",
+  "mlos_zone_b_receipt_sha256": "699c3d05958a8c274c04662f3cdcfee59049a0ce1f6ab6647d2183f1bb9923fa",
+  "parent_commit_sha": "44eccad8dfa38bcc397c45420680d62d0020c585",
+  "schema": "holosphere.track_s117.live_v2_16warp_d512.v1",
+  "sm_count": 48,
+  "temp_after_c": 60
 }

@@ -197,6 +197,7 @@ class TestVerifyHoloSphereReceiptsR5(unittest.TestCase):
             ("ERR_MLOS_CLEAN", lambda r: r.__setitem__("determinism_zone", "A")),
             ("ERR_MLOS_CLEAN", lambda r: r.__setitem__("clean_hardware_run", False)),
             ("ERR_MLOS_CLEAN", lambda r: r.__setitem__("anomalies", ["throttle"])),
+            ("ERR_MLOS_CLEAN", lambda r: r.__setitem__("git_head", None)),
             ("ERR_MLOS_EXIT", lambda r: r["execution"].__setitem__("exit_code", 1)),
             ("ERR_MLOS_EXIT", lambda r: r["execution"].__setitem__("exit_code", False)),
             ("ERR_MLOS_THERMAL", lambda r: r["end_gpu_telemetry"]["clocks_event_reasons"].__setitem__("thermal_throttled", True)),
@@ -224,6 +225,23 @@ class TestVerifyHoloSphereReceiptsR5(unittest.TestCase):
                 self.assertEqual(cm_b.exception.code, code)
             finally:
                 p.write_text(json.dumps(orig), encoding="utf-8")
+
+        # Live source-binding fail-closed tamper controls (missing .cu, missing/tampered cu_sha256, cu_kernels_sha256, ML-OS SHA)
+        cu_s116_p = td / "cuda/sm86/holosphere_megakernel_sm86.cu"
+        cu_s116_bak = cu_s116_p.read_bytes()
+        cu_s116_p.unlink()
+        with self.assertRaises(vhr.SiliKernelsReceiptError) as cm_lcu:
+            vhr.verify_live_benchmark_results(td)
+        self.assertEqual(cm_lcu.exception.code, "ERR_LIVE_CU_BINDING")
+        cu_s116_p.write_bytes(cu_s116_bak)
+
+        tamper_bench("receipts/s116_phase2b_gpu_results.json", "ERR_LIVE_CU_BINDING", lambda r: r.pop("cu_sha256"))
+        tamper_bench("receipts/s116_phase2b_gpu_results.json", "ERR_LIVE_CU_BINDING", lambda r: r.__setitem__("cu_sha256", "0" * 64))
+        tamper_bench("receipts/s116_phase2b_gpu_results.json", "ERR_LIVE_MLOS_BINDING", lambda r: r.__setitem__("mlos_zone_b_receipt_sha256", "0" * 64))
+        tamper_bench("receipts/s116_phase2b_gpu_results.json", "ERR_LIVE_MLOS_BINDING", lambda r: r.__setitem__("parent_commit_sha", "0" * 40))
+        tamper_bench("receipts/s117_live_rtx3080_zone_b_results.json", "ERR_LIVE_CU_BINDING", lambda r: r.__setitem__("cu_kernels_sha256", "0" * 64))
+        tamper_bench("receipts/s117_live_v2_d512_zone_b_results.json", "ERR_LIVE_CU_BINDING", lambda r: r.__setitem__("cu_sha256", "0" * 64))
+        tamper_bench("receipts/s117_v3_frontier_live_gpu_results.json", "ERR_LIVE_CU_BINDING", lambda r: r.__setitem__("cu_rel", "cuda/sm86/wrong.cu"))
 
         tamper_bench("receipts/s116_phase2b_gpu_results.json", "ERR_S116_RESULTS", lambda r: r["phase2b_live_parity"].__setitem__("all_parity_pass", False))
         tamper_bench("receipts/s116_phase2b_gpu_results.json", "ERR_S116_RESULTS", lambda r: r["h16a_v2_matched_12layer_showdown"]["uniform_cell_8warp_d256_1cta"].__setitem__("us_per_tok", 35.0))

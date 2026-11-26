@@ -34,21 +34,21 @@
     "memory_free_mib": 7893,
     "memory_used_mib": 2,
     "non_compute_desktop_vram_mib": 2,
-    "power_draw_w": 20.64,
+    "power_draw_w": 20.29,
     "power_limit_w": null,
     "pstate": "P0",
-    "temperature_gpu_c": 60,
+    "temperature_gpu_c": 58,
     "vbios_version": "94.04.49.00.51"
   },
   "execution": {
     "command_argc": 5,
     "command_exe": "aletheia-py",
-    "duration_ms": 67586.356,
-    "ended_utc": "2026-11-26T01:41:38Z",
+    "duration_ms": 69105.838,
+    "ended_utc": "2026-11-26T06:59:13Z",
     "exit_code": 0,
-    "started_utc": "2026-11-26T01:40:30Z"
+    "started_utc": "2026-11-26T06:58:04Z"
   },
-  "git_head": null,
+  "git_head": "44eccad8dfa38bcc397c45420680d62d0020c585",
   "gpu_telemetry_available": true,
   "host": {
     "cpu_isa": "x86_64",
@@ -58,20 +58,18 @@
   },
   "profile_id": "ux582hs-rtx3080-8gb",
   "profile_sha256": "566c9192d38682a0ec4d652a63a3510aaefb9dc20ef91ae9bdc6d4abbbf5cbe2",
-  "receipt_sha256": "de012df35435ab5b4193443f50c21bf7382bc68899309e9727b0e40f521d7c8f",
+  "receipt_sha256": "fef9d2696e639ef82e3892a3e45a87e74201e9f0cdf21576ecbbd85594029cba",
   "schema": "mlos-run-receipt/v0.1",
   "start_gpu_telemetry": {
     "clocks_event_reasons": {
-      "bitmask": 1,
-      "decoded_reasons": [
-        "GpuIdle"
-      ],
-      "raw": "0x0000000000000001",
+      "bitmask": 1024,
+      "decoded_reasons": [],
+      "raw": "0x0000000000000400",
       "slowdown_active": false,
       "thermal_throttled": false
     },
-    "clocks_mem_mhz": 405,
-    "clocks_sm_mhz": 210,
+    "clocks_mem_mhz": 6001,
+    "clocks_sm_mhz": 1710,
     "compute_processes": [],
     "compute_vram_mib": 0,
     "driver_version": "615.78.08",
@@ -82,10 +80,10 @@
     "memory_free_mib": 7893,
     "memory_used_mib": 2,
     "non_compute_desktop_vram_mib": 2,
-    "power_draw_w": 13.18,
+    "power_draw_w": 37.09,
     "power_limit_w": null,
-    "pstate": "P8",
-    "temperature_gpu_c": 54,
+    "pstate": "P0",
+    "temperature_gpu_c": 64,
     "vbios_version": "94.04.49.00.51"
   }
 }

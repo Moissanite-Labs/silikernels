@@ -149,12 +149,41 @@ PTXAS_SPECS: tuple[dict[str, Any], ...] = (
     },
 )
 
+EXPECTED_PARENT_COMMIT_SHA: str = "44eccad8dfa38bcc397c45420680d62d0020c585"
+
 ZONE_B_MLOS_RECEIPTS: tuple[tuple[str, str], ...] = (
-    ("receipts/mlos_zone_b_s116_phase2b.json", "739f8708a22152763f3a8c8b448809bb3363dd2f592966ce1069056a03786d18"),
-    ("receipts/mlos_zone_b_s117_live.json", "de012df35435ab5b4193443f50c21bf7382bc68899309e9727b0e40f521d7c8f"),
-    ("receipts/mlos_zone_b_s117_v2_d512.json", "2fccfe50027445937d93ca67a1441658194123891298d98ef60c9bed6925d05e"),
-    ("receipts/mlos_zone_b_s117_v3_frontier.json", "7655e610e12e3de767116e5093cdb76294ea9594a85fe6240e4f0de3b13beb0e"),
+    ("receipts/mlos_zone_b_s116_phase2b.json", "bec7b99bd4023dac4953e806f59c948f596cf69f470e36c9ed37a44270c917d8"),
+    ("receipts/mlos_zone_b_s117_live.json", "fef9d2696e639ef82e3892a3e45a87e74201e9f0cdf21576ecbbd85594029cba"),
+    ("receipts/mlos_zone_b_s117_v2_d512.json", "699c3d05958a8c274c04662f3cdcfee59049a0ce1f6ab6647d2183f1bb9923fa"),
+    ("receipts/mlos_zone_b_s117_v3_frontier.json", "feecc7487bc03c860148d559f76abd7ea705b6ab323572bfe91be37e0266bdf1"),
 )
+
+LIVE_RESULT_BINDINGS: dict[str, tuple[str, str, str, str | None]] = {
+    "s116": (
+        "cuda/sm86/holosphere_megakernel_sm86.cu",
+        "receipts/mlos_zone_b_s116_phase2b.json",
+        "bec7b99bd4023dac4953e806f59c948f596cf69f470e36c9ed37a44270c917d8",
+        None,
+    ),
+    "s117_v1": (
+        "cuda/sm86/holosphere_h256_chunk32_sm86.cu",
+        "receipts/mlos_zone_b_s117_live.json",
+        "fef9d2696e639ef82e3892a3e45a87e74201e9f0cdf21576ecbbd85594029cba",
+        "cu_kernels_sha256",
+    ),
+    "s117_v2": (
+        "cuda/sm86/holosphere_h256_chunk32_sm86.cu",
+        "receipts/mlos_zone_b_s117_v2_d512.json",
+        "699c3d05958a8c274c04662f3cdcfee59049a0ce1f6ab6647d2183f1bb9923fa",
+        None,
+    ),
+    "v3": (
+        "cuda/sm86/holosphere_v3_frontier_sm86.cu",
+        "receipts/mlos_zone_b_s117_v3_frontier.json",
+        "feecc7487bc03c860148d559f76abd7ea705b6ab323572bfe91be37e0266bdf1",
+        None,
+    ),
+}
 
 EXPECTED_CANARY_OFFSETS: dict[str, int] = {
     "sec_count_u32": 0,
@@ -281,9 +310,10 @@ def verify_zone_b_mlos_receipt(path: Path, expected_receipt_sha256: str) -> dict
         rec.get("schema") == "mlos-run-receipt/v0.1"
         and rec.get("determinism_zone") == "B"
         and rec.get("clean_hardware_run") is True
-        and rec.get("anomalies") == [],
+        and rec.get("anomalies") == []
+        and rec.get("git_head") == EXPECTED_PARENT_COMMIT_SHA,
         "ERR_MLOS_CLEAN",
-        f"{path.name}: Zone-B clean-hardware invariants failed",
+        f"{path.name}: Zone-B clean-hardware or git_head invariants failed",
     )
     exe = rec.get("execution")
     require_ok(isinstance(exe, dict) and _is_int_eq(exe.get("exit_code"), 0), "ERR_MLOS_EXIT", f"{path.name}: exit_code != 0")
@@ -308,9 +338,36 @@ def verify_zone_b_mlos_receipt(path: Path, expected_receipt_sha256: str) -> dict
     }
 
 
+def _verify_live_source_binding(
+    repo_root: Path,
+    data: dict[str, Any],
+    binding_key: str,
+) -> None:
+    """Fail-closed binding between a live GPU result receipt, worktree .cu bytes, and Zone-B ML-OS receipt."""
+    cu_rel, mlos_rel, mlos_sha, extra_cu_key = LIVE_RESULT_BINDINGS[binding_key]
+    cu_path = repo_root / cu_rel
+    require_ok(cu_path.is_file(), "ERR_LIVE_CU_BINDING", f"{binding_key}: missing CUDA source {cu_rel}")
+    live_cu_sha = hashlib.sha256(cu_path.read_bytes()).hexdigest()
+    require_ok(
+        data.get("cu_rel") == cu_rel
+        and data.get("cu_sha256") == live_cu_sha
+        and (extra_cu_key is None or data.get(extra_cu_key) == live_cu_sha),
+        "ERR_LIVE_CU_BINDING",
+        f"{binding_key}: live result JSON cu_sha256 does not match committed {cu_rel}",
+    )
+    require_ok(
+        data.get("parent_commit_sha") == EXPECTED_PARENT_COMMIT_SHA
+        and data.get("mlos_zone_b_receipt_file") == mlos_rel
+        and data.get("mlos_zone_b_receipt_sha256") == mlos_sha,
+        "ERR_LIVE_MLOS_BINDING",
+        f"{binding_key}: live result JSON ML-OS Zone-B receipt or parent_commit_sha binding mismatch",
+    )
+
+
 def verify_live_benchmark_results(repo_root: Path) -> dict[str, Any]:
-    """Fail-closed parity & headline-metric verification across all 4 live RTX 3080 result receipts."""
+    """Fail-closed source-binding, parity, & headline-metric verification across all 4 live RTX 3080 receipts."""
     s116 = load_strict_json(repo_root / "receipts" / "s116_phase2b_gpu_results.json")
+    _verify_live_source_binding(repo_root, s116, "s116")
     p116 = s116.get("phase2b_live_parity")
     c116 = s116.get("h16a_v2_matched_12layer_showdown", {}).get("uniform_cell_8warp_d256_1cta") if isinstance(s116.get("h16a_v2_matched_12layer_showdown"), dict) else None
     l116 = s116.get("h16c_v2_l2_persistence_and_weight_in_a")
@@ -332,6 +389,7 @@ def verify_live_benchmark_results(repo_root: Path) -> dict[str, Any]:
     )
 
     s117_v1 = load_strict_json(repo_root / "receipts" / "s117_live_rtx3080_zone_b_results.json")
+    _verify_live_source_binding(repo_root, s117_v1, "s117_v1")
     bm117 = s117_v1.get("bare_metal_rtx3080") if isinstance(s117_v1.get("bare_metal_rtx3080"), dict) else {}
     ab117 = bm117.get("chunk32_woodbury_bwd_ab_t8192")
     can117 = bm117.get("live_sys_ber_canary")
@@ -357,6 +415,7 @@ def verify_live_benchmark_results(repo_root: Path) -> dict[str, Any]:
     )
 
     s117_v2 = load_strict_json(repo_root / "receipts" / "s117_live_v2_d512_zone_b_results.json")
+    _verify_live_source_binding(repo_root, s117_v2, "s117_v2")
     e2e_v2 = s117_v2.get("full_e2e_fwht256_12L_d512")
     par_v2 = s117_v2.get("fwht256_bent4_lm_head_parity")
     can_v2 = s117_v2.get("live_sys_ber_canary_v2")
@@ -381,6 +440,7 @@ def verify_live_benchmark_results(repo_root: Path) -> dict[str, Any]:
     )
 
     v3 = load_strict_json(repo_root / "receipts" / "s117_v3_frontier_live_gpu_results.json")
+    _verify_live_source_binding(repo_root, v3, "v3")
     v3_d = v3.get("v3_d512")
     v3_b = v3.get("chunk32_bwd_wmma")
     require_ok(

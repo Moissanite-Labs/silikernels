@@ -34,21 +34,21 @@
     "memory_free_mib": 7893,
     "memory_used_mib": 2,
     "non_compute_desktop_vram_mib": 2,
-    "power_draw_w": 34.63,
+    "power_draw_w": 34.26,
     "power_limit_w": null,
     "pstate": "P0",
-    "temperature_gpu_c": 61,
+    "temperature_gpu_c": 59,
     "vbios_version": "94.04.49.00.51"
   },
   "execution": {
-    "command_argc": 3,
-    "command_exe": "bash",
-    "duration_ms": 7149.995,
-    "ended_utc": "2026-11-26T02:21:54Z",
+    "command_argc": 1,
+    "command_exe": "s117_live_v2_d512_bench",
+    "duration_ms": 7060.121,
+    "ended_utc": "2026-11-26T06:59:20Z",
     "exit_code": 0,
-    "started_utc": "2026-11-26T02:21:47Z"
+    "started_utc": "2026-11-26T06:59:13Z"
   },
-  "git_head": null,
+  "git_head": "44eccad8dfa38bcc397c45420680d62d0020c585",
   "gpu_telemetry_available": true,
   "host": {
     "cpu_isa": "x86_64",
@@ -58,20 +58,18 @@
   },
   "profile_id": "ux582hs-rtx3080-8gb",
   "profile_sha256": "566c9192d38682a0ec4d652a63a3510aaefb9dc20ef91ae9bdc6d4abbbf5cbe2",
-  "receipt_sha256": "2fccfe50027445937d93ca67a1441658194123891298d98ef60c9bed6925d05e",
+  "receipt_sha256": "699c3d05958a8c274c04662f3cdcfee59049a0ce1f6ab6647d2183f1bb9923fa",
   "schema": "mlos-run-receipt/v0.1",
   "start_gpu_telemetry": {
     "clocks_event_reasons": {
-      "bitmask": 1,
-      "decoded_reasons": [
-        "GpuIdle"
-      ],
-      "raw": "0x0000000000000001",
+      "bitmask": 0,
+      "decoded_reasons": [],
+      "raw": "0x0000000000000000",
       "slowdown_active": false,
       "thermal_throttled": false
     },
-    "clocks_mem_mhz": 405,
-    "clocks_sm_mhz": 210,
+    "clocks_mem_mhz": 6001,
+    "clocks_sm_mhz": 1245,
     "compute_processes": [],
     "compute_vram_mib": 0,
     "driver_version": "615.78.08",
@@ -82,10 +80,10 @@
     "memory_free_mib": 7893,
     "memory_used_mib": 2,
     "non_compute_desktop_vram_mib": 2,
-    "power_draw_w": 13.44,
+    "power_draw_w": 20.48,
     "power_limit_w": null,
-    "pstate": "P8",
-    "temperature_gpu_c": 57,
+    "pstate": "P0",
+    "temperature_gpu_c": 58,
     "vbios_version": "94.04.49.00.51"
   }
 }
