@@ -1,0 +1,317 @@
+{
+  "bpb_deltas": {
+    "arm3_beats_arm1_all_seeds": true,
+    "arm3_beats_arm2_all_seeds": true,
+    "arm3_beats_arm2b_all_seeds": false,
+    "arm3_minus_arm1_prefix_q": "-4076046292572492268462373011/4006024977801505535998006968",
+    "arm3_minus_arm2_fixed_diff_q": "-231550461837267123533464981/532428173129105524462687960",
+    "arm3_minus_arm2b_1scalar_q": "-3846990914287861670747551/908223362551775274831758232",
+    "arm3_minus_arm4_dense_q": "841540891353430125386611795/456130571001507990317219256"
+  },
+  "energy_power_status": "UNCONTROLLED_LAPTOP_NOT_CLAIMED",
+  "gates": {
+    "G1_zero_spill_sm86": true,
+    "G2_fold1k_bpb_and_latency": true,
+    "G3_smem_canary_atomic_and_recovery": true
+  },
+  "hardware": {
+    "device": "NVIDIA GeForce RTX 3080 Laptop GPU",
+    "host_native_atomic_supported": false,
+    "nvcc_version": "Cuda compilation tools, release 13.4, V13.4.92",
+    "sm": "8.6"
+  },
+  "result_sha256": "d02515363934dd4fba7ad3d79fd3eae0c328ae41089d4799ba43c7ff0f7593a1",
+  "schema": "silikernels.sm86.smem_canary_folded_fwht_results.v1",
+  "silicon_parity_and_canary": {
+    "clean_packed_u32": 0,
+    "clean_sys_atomics": 0,
+    "ded120_ded_count": 120,
+    "ded120_packed_u32": 7864320,
+    "ded120_sec_count": 0,
+    "ded120_sys_atomics": 1,
+    "folded1k_cell_fp64_max_err_q": "2256895237/10000000000000000",
+    "folded1k_head_fp64_max_err_q": "683433099/2000000000000000",
+    "multi_cta_ded_wrap_diag_u32": 2147483682,
+    "multi_cta_ded_wrap_packed_u32": 4294901774,
+    "multi_cta_sec_carry_diag_u32": 2147483669,
+    "multi_cta_sec_carry_packed_u32": 131071,
+    "overflow_ded70000_diag_u32": 2147483682,
+    "overflow_ded70000_packed_u32": 4294901772,
+    "overflow_sec70000_diag_u32": 2147483669,
+    "overflow_sec70000_packed_u32": 131071,
+    "sec16_ded_count": 0,
+    "sec16_hidden_max_abs_err_q": "0/1",
+    "sec16_logits_max_abs_err_q": "0/1",
+    "sec16_packed_u32": 16,
+    "sec16_sec_count": 16,
+    "sec16_sys_atomics": 1,
+    "standalone_head_folded1k_us_q": "1425187/1000000",
+    "standalone_head_overhead_us_q": "267/2000",
+    "standalone_head_unfolded_us_q": "1291687/1000000",
+    "storms": [
+      {
+        "atomic_reduction_ratio_q": "0/1",
+        "expected_ded": 0,
+        "expected_sec": 0,
+        "latency_speedup_q": "21770688/21489751",
+        "rate_pct": 0,
+        "smem_ded": 0,
+        "smem_sec": 0,
+        "smem_sys_atomics": 0,
+        "smem_us_per_tok_q": "21489751/1000000",
+        "warp_ded": 0,
+        "warp_sec": 0,
+        "warp_sys_atomics": 0,
+        "warp_us_per_tok_q": "340167/15625"
+      },
+      {
+        "atomic_reduction_ratio_q": "55/1",
+        "expected_ded": 17,
+        "expected_sec": 55,
+        "latency_speedup_q": "6235743/907550",
+        "rate_pct": 1,
+        "smem_ded": 17,
+        "smem_sec": 55,
+        "smem_sys_atomics": 1,
+        "smem_us_per_tok_q": "127057/4000",
+        "warp_ded": 17,
+        "warp_sec": 55,
+        "warp_sys_atomics": 55,
+        "warp_us_per_tok_q": "43650201/200000"
+      },
+      {
+        "atomic_reduction_ratio_q": "185/1",
+        "expected_ded": 162,
+        "expected_sec": 459,
+        "latency_speedup_q": "174821615/17931251",
+        "rate_pct": 10,
+        "smem_ded": 162,
+        "smem_sec": 459,
+        "smem_sys_atomics": 1,
+        "smem_us_per_tok_q": "17931251/500000",
+        "warp_ded": 162,
+        "warp_sec": 459,
+        "warp_sys_atomics": 185,
+        "warp_us_per_tok_q": "34964323/100000"
+      },
+      {
+        "atomic_reduction_ratio_q": "192/1",
+        "expected_ded": 1498,
+        "expected_sec": 4646,
+        "latency_speedup_q": "368291497/39973751",
+        "rate_pct": 100,
+        "smem_ded": 1498,
+        "smem_sec": 4646,
+        "smem_sys_atomics": 1,
+        "smem_us_per_tok_q": "39973751/1000000",
+        "warp_ded": 1498,
+        "warp_sec": 4646,
+        "warp_sys_atomics": 192,
+        "warp_us_per_tok_q": "368291497/1000000"
+      }
+    ]
+  },
+  "source_bindings": {
+    "bench_cu_path": "cuda/sm86/holosphere_smem_canary_folded_fwht_bench.cu",
+    "bench_cu_sha256": "7a647bf7ffa7b61aa67ee2ca44288c184ca31ef0c70735fd35adfd753b89b67f",
+    "kernel_cu_path": "cuda/sm86/holosphere_smem_canary_folded_fwht_sm86.cu",
+    "kernel_cu_sha256": "80f983ef9cf71f78a4735cf60c30662eabce3ef77da9c2f4b94824cf9aa6fc23",
+    "ptxas_receipt_path": "receipts/smem_canary_folded_fwht_ptxas_receipt.json",
+    "ptxas_receipt_sha256": "9eb4969632caadc3b08c17b06e8652273fd948e8d44b9b0d5e012cfeca21ddcb"
+  },
+  "utf8_bpb_study": {
+    "arm1_upper_half_grad_norm_q": "0/1",
+    "arm3_upper_half_grad_norm_q": "4768793/131072",
+    "arms": {
+      "arm1_prefix_fwht": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 0,
+        "head_params": 0,
+        "mean_eval_bpb_q": "374116135818485/58552859269188",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "611737/95863",
+            "eval_bpb_q": "611737/95863",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 42,
+            "train_wall_s_q": "3181/240"
+          },
+          {
+            "eval_bpb_bf16_q": "361130/56559",
+            "eval_bpb_q": "361130/56559",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 137,
+            "train_wall_s_q": "5384/427"
+          },
+          {
+            "eval_bpb_bf16_q": "391761/61196",
+            "eval_bpb_q": "391761/61196",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 2026,
+            "train_wall_s_q": "11777/928"
+          }
+        ],
+        "total_params": 9115648
+      },
+      "arm2_fixed_diff_fwht": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 0,
+        "head_params": 0,
+        "mean_eval_bpb_q": "67783330197739/11673114395790",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "42639/7346",
+            "eval_bpb_q": "42639/7346",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 42,
+            "train_wall_s_q": "12321/956"
+          },
+          {
+            "eval_bpb_bf16_q": "95570/16483",
+            "eval_bpb_q": "95570/16483",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 137,
+            "train_wall_s_q": "10889/859"
+          },
+          {
+            "eval_bpb_bf16_q": "186958/32135",
+            "eval_bpb_q": "186958/32135",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 2026,
+            "train_wall_s_q": "12119/963"
+          }
+        ],
+        "total_params": 9115648
+      },
+      "arm2b_fixed_diff_1scalar_fwht": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 2,
+        "head_params": 1,
+        "mean_eval_bpb_q": "71366922803657/13274773629012",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "106475/19908",
+            "eval_bpb_q": "106475/19908",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 42,
+            "train_wall_s_q": "11709/925"
+          },
+          {
+            "eval_bpb_bf16_q": "42289/7863",
+            "eval_bpb_q": "42289/7863",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 137,
+            "train_wall_s_q": "1643/131"
+          },
+          {
+            "eval_bpb_bf16_q": "458090/84803",
+            "eval_bpb_q": "458090/84803",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 2026,
+            "train_wall_s_q": "8101/651"
+          }
+        ],
+        "total_params": 9115649
+      },
+      "arm3_learned_1kib_fp16_fold_fwht": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 1024,
+        "head_params": 512,
+        "mean_eval_bpb_q": "4410362969391401/821006870264232",
+        "seeds": [
+          {
+            "alpha_rms_q": "2927/2354",
+            "beta_rms_q": "6955/5594",
+            "eval_bpb_bf16_q": "8482/1583",
+            "eval_bpb_q": "337572/63001",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "1994/99730583",
+            "seed": 42,
+            "train_wall_s_q": "12336/985"
+          },
+          {
+            "alpha_rms_q": "10652/8575",
+            "beta_rms_q": "8509/6850",
+            "eval_bpb_bf16_q": "445833/83072",
+            "eval_bpb_q": "488819/91082",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "94669/3783181952",
+            "seed": 137,
+            "train_wall_s_q": "3102/245"
+          },
+          {
+            "alpha_rms_q": "4227/3401",
+            "beta_rms_q": "8021/6453",
+            "eval_bpb_bf16_q": "178512/33115",
+            "eval_bpb_q": "514185/95384",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "47667/3158641160",
+            "seed": 2026,
+            "train_wall_s_q": "11167/880"
+          }
+        ],
+        "total_params": 9116160
+      },
+      "arm4_dense_256x512": {
+        "hbm_vocab_table_bytes": 262146,
+        "head_fp16_bytes": 262146,
+        "head_params": 131073,
+        "mean_eval_bpb_q": "5878433602252/1666723827249",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "28162/7989",
+            "eval_bpb_q": "28162/7989",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 42,
+            "train_wall_s_q": "1625/127"
+          },
+          {
+            "eval_bpb_bf16_q": "151109/42996",
+            "eval_bpb_q": "151109/42996",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 137,
+            "train_wall_s_q": "5681/447"
+          },
+          {
+            "eval_bpb_bf16_q": "274927/77636",
+            "eval_bpb_q": "274927/77636",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "0/1",
+            "seed": 2026,
+            "train_wall_s_q": "11431/872"
+          }
+        ],
+        "total_params": 9246721
+      }
+    },
+    "batch_size": 8,
+    "butterfly_vs_matrix_fp64_max_err_q": "0/1",
+    "d_ff": 800,
+    "d_model": 512,
+    "eval_bytes": 32768,
+    "eval_chunks": 64,
+    "n_heads": 16,
+    "n_layers": 4,
+    "scope_note": "Controlled 5-arm x 3-seed iso-budget UTF-8 byte-LM evaluation (external UTF-8 corpus binary not checked into this kernel repo). Gate G2 tests arm3 < arm1 and arm3 < arm2 on all 3 seeds plus standalone head overhead <= 0.5 us/tok; arm2b (1 scalar) is an un-gated attribution control showing a -0.0042 BPB tie across 2/3 seeds. Only arm3 applies an explicit FP16 head-weight round-trip vs BF16 (fp16_quant_bpb_diff_q > 0); the other arms evaluate identical BF16 head weights (fp16_quant_bpb_diff_q = 0/1).",
+    "seeds": [
+      42,
+      137,
+      2026
+    ],
+    "seq_len": 512,
+    "steps_per_seed": 300,
+    "tokens_per_seed": 1228800
+  },
+  "verdict": "CONFIRMED"
+}
