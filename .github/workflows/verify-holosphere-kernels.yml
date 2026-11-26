@@ -1,3 +1,8 @@
+# Note: GitHub-hosted ubuntu-latest runners do not ship a CUDA toolkit (nvcc) or NVIDIA GPU.
+# This workflow therefore certifies committed ptxas/SASS receipts, source SHA-256 bindings,
+# Zone-B ML-OS hardware receipts, and the C11/C++17 UBSan Razor host ABI.
+# Live nvcc zero-spill recompilation (`make check-holosphere-zero-spill` / `make check-zero-spill`)
+# runs locally on hosts equipped with nvcc.
 name: Verify HoloSphere S116/S117/V3 Receipts & Razor ABI
 
 on:
@@ -15,9 +20,9 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -26,6 +31,7 @@ jobs:
           CUDA_VISIBLE_DEVICES: ""
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
+          set -euo pipefail
           for flags in "-I -B" "-I -O -B" "-I -B -W error"; do
             python3 $flags verify/verify_holosphere_receipts.py --check --json
             python3 $flags verify/test_verify_holosphere_receipts_r5.py
@@ -33,13 +39,22 @@ jobs:
 
       - name: C11 & C++17 UBSan ABI check on include/razor_abi_4byte_sys.h
         run: |
+          set -euo pipefail
           make verify-razor-abi
           rm -rf build
 
       - name: Hygiene & leak check across new HoloSphere kernel files
         run: |
-          if grep -rnE '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}' include/ verify/ cuda/sm86/holosphere_*.cu cuda/sm86/holosphere_s116_s117.mk receipts/s116_* receipts/s117_* receipts/v3_frontier_* receipts/mlos_zone_b_s11*; then
+          set -euo pipefail
+          set +e
+          grep -rnE '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-(proj-)?[A-Za-z0-9_-]{20}|AKIA[0-9A-Z]{16}' include/ verify/ cuda/sm86/holosphere_*.cu cuda/sm86/holosphere_s116_s117.mk receipts/s116_* receipts/s117_* receipts/v3_frontier_* receipts/mlos_zone_b_s11*
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
             echo "ERROR: leak detected" >&2
             exit 1
+          elif [ "$rc" -ne 1 ]; then
+            echo "ERROR: hygiene grep failed with exit code $rc" >&2
+            exit "$rc"
           fi
           echo "HOLOSPHERE_HYGIENE_PASS=1"
