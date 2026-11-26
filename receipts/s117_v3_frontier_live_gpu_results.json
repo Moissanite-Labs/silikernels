@@ -1,0 +1,35 @@
+{
+  "schema": "holosphere.track_s117.v3_frontier_live_bench.v1",
+  "device": "NVIDIA GeForce RTX 3080 Laptop GPU",
+  "sm": "8.6",
+  "v3_d512": {
+    "fwht256_max_abs_err": 1.960239e-07,
+    "sec16_hidden_max_abs_err": 0.000000e+00,
+    "sec16_logits_max_abs_err": 0.000000e+00,
+    "clean_canary": 0,
+    "sec16_canary": 16,
+    "ded_canary": 1,
+    "cellop_us_per_tok_2048": 29.1810,
+    "e2e_us_per_tok_2048": 28.6225,
+    "cellop_us_per_tok_8192": 21.2373,
+    "e2e_us_per_tok_8192": 22.2485,
+    "e2e_tok_per_sec_8192": 44946.85,
+    "cellop_graph_us_per_tok_8192": 20.5056,
+    "e2e_graph_us_per_tok_16384": 21.5202,
+    "e2e_graph_tok_per_sec_16384": 46467.86,
+    "e2e_graph_mj_per_tok": 1.3076,
+    "parity_pass": true
+  },
+  "chunk32_bwd_wmma": {
+    "parity_T96_3chunks_gz_max_err": 1.413526e-05,
+    "parity_T96_3chunks_gx_geo_max_err": 1.822066e-05,
+    "parity_T96_3chunks_gxt_sfast_max_err": 2.330937e-05,
+    "parity_T96_3chunks_gS_out_max_err": 4.362300e-05,
+    "B4_T8192_D512_L12_ms": 220.8353,
+    "B4_T8192_D512_L12_tok_per_sec": 148382.09,
+    "B4_T8192_D512_L12_mj": 13451.30,
+    "speedup_vs_choice_b_532ms": 2.4093,
+    "parity_pass": true
+  },
+  "all_parity_pass": true
+}

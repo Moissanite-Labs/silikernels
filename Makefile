@@ -28,6 +28,8 @@ all: cpu cuda
 
 cpu: $(BUILD) $(CPU_BINS)
 
+include cuda/sm86/holosphere_s116_s117.mk
+
 cuda: $(BUILD) $(CUDA_BINS)
 
 $(BUILD):

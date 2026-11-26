@@ -1,0 +1,222 @@
+{
+  "all_zero_spill": true,
+  "arch": "sm_86",
+  "compile_flags": [
+    "-O3",
+    "-std=c++17",
+    "-arch=sm_86",
+    "--ptxas-options=-v",
+    "--shared",
+    "-Xcompiler",
+    "-fPIC"
+  ],
+  "kernel_count": 10,
+  "kernels": [
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 388,
+      "name": "_ZN15holosphere_s11627s116_fmnmx_onehot_imma_sm86EPKfPKaPiS4_i",
+      "registers": 20,
+      "smem_bytes": 256,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 392,
+      "name": "_ZN15holosphere_s11634s116_blockh4_weight_in_a_imma_sm86EPKmPKaPiPjij",
+      "registers": 30,
+      "smem_bytes": 512,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 472,
+      "name": "_ZN15holosphere_s11623uniform_cell_8warp_sm86EPNS_18S116MappedByteRingEPKNS_10S116CellOpEiNS_22S116Cell8WarpWorkspaceE",
+      "registers": 75,
+      "smem_bytes": 4680,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 0,
+      "cmem0_bytes": 412,
+      "name": "_ZN15holosphere_s11625s116_su2_cayley_step_sm86EPK6float4PKfS2_PK6float2PS0_S8_lf",
+      "registers": 26,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 0,
+      "cmem0_bytes": 400,
+      "name": "_ZN15holosphere_s11619s116_warp_norm_sm86EPK6float4PS0_PjPfljf",
+      "registers": 19,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 384,
+      "name": "_ZN15holosphere_s11627s116_mma_m16n8k16_tile_sm86EPK13__nv_bfloat16S2_Pfij",
+      "registers": 18,
+      "smem_bytes": 768,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 0,
+      "cmem0_bytes": 412,
+      "name": "_ZN15holosphere_s11627s116_blockh4_dp4a_gemv_sm86EPKmPK6__halfPK4int4fPfPjiij",
+      "registers": 39,
+      "smem_bytes": 0,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 392,
+      "name": "_ZN15holosphere_s11631s116_blockh4_imma_m16n8k32_sm86EPKaPKmPiPjij",
+      "registers": 22,
+      "smem_bytes": 640,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 488,
+      "name": "_ZN15holosphere_s11629holosphere_persistent_vm_sm86EPNS_18S116MappedByteRingEPKNS_8S116InstEiNS_15S116VMWorkspaceE",
+      "registers": 80,
+      "smem_bytes": 1280,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    },
+    {
+      "arch": "sm_86",
+      "barriers": 1,
+      "cmem0_bytes": 440,
+      "name": "_ZN15holosphere_s11628uniform_cell_megakernel_sm86EPNS_18S116MappedByteRingEPKNS_10S116CellOpEiNS_17S116CellWorkspaceE",
+      "registers": 56,
+      "smem_bytes": 1056,
+      "spill_loads_bytes": 0,
+      "spill_stores_bytes": 0,
+      "stack_frame_bytes": 0
+    }
+  ],
+  "nvcc_version": "13.4 V13.4.92",
+  "per_kernel_sass_counts": {
+    "_ZN15holosphere_s11619s116_warp_norm_sm86EPK6float4PS0_PjPfljf": {
+      "FMNMX": 7,
+      "MUFU.RSQ": 2,
+      "SEL": 2,
+      "SHFL": 6
+    },
+    "_ZN15holosphere_s11623uniform_cell_8warp_sm86EPNS_18S116MappedByteRingEPKNS_10S116CellOpEiNS_22S116Cell8WarpWorkspaceE": {
+      "ATOMG": 4,
+      "FMNMX": 11,
+      "IMMA.16832": 1,
+      "LDGSTS": 2,
+      "MEMBAR": 8,
+      "MUFU.RSQ": 3,
+      "NANOSLEEP": 4,
+      "POPC": 10,
+      "SEL": 22,
+      "SHFL": 20
+    },
+    "_ZN15holosphere_s11625s116_su2_cayley_step_sm86EPK6float4PKfS2_PK6float2PS0_S8_lf": {
+      "MUFU.RSQ": 1,
+      "SEL": 2
+    },
+    "_ZN15holosphere_s11627s116_blockh4_dp4a_gemv_sm86EPKmPK6__halfPK4int4fPfPjiij": {
+      "IDP": 4,
+      "POPC": 5,
+      "SHFL": 10
+    },
+    "_ZN15holosphere_s11627s116_fmnmx_onehot_imma_sm86EPKfPKaPiS4_i": {
+      "FMNMX": 4,
+      "IMMA.16832": 1,
+      "LDGSTS": 1,
+      "SEL": 8,
+      "SHFL": 10
+    },
+    "_ZN15holosphere_s11627s116_mma_m16n8k16_tile_sm86EPK13__nv_bfloat16S2_Pfij": {
+      "HMMA.16816": 1,
+      "LDGSTS": 2
+    },
+    "_ZN15holosphere_s11628uniform_cell_megakernel_sm86EPNS_18S116MappedByteRingEPKNS_10S116CellOpEiNS_17S116CellWorkspaceE": {
+      "ATOMG": 1,
+      "FMNMX": 8,
+      "IMMA.16832": 1,
+      "LDGSTS": 3,
+      "MEMBAR": 9,
+      "MUFU.RSQ": 3,
+      "NANOSLEEP": 1,
+      "POPC": 18,
+      "SEL": 10,
+      "SHFL": 14
+    },
+    "_ZN15holosphere_s11629holosphere_persistent_vm_sm86EPNS_18S116MappedByteRingEPKNS_8S116InstEiNS_15S116VMWorkspaceE": {
+      "ATOMG": 1,
+      "FMNMX": 1,
+      "HMMA.16816": 1,
+      "LDGSTS": 3,
+      "MEMBAR": 9,
+      "MUFU.RSQ": 2,
+      "NANOSLEEP": 1,
+      "POPC": 9,
+      "SEL": 18,
+      "SHFL": 17
+    },
+    "_ZN15holosphere_s11631s116_blockh4_imma_m16n8k32_sm86EPKaPKmPiPjij": {
+      "IMMA.16832": 1,
+      "LDGSTS": 2,
+      "POPC": 10,
+      "SEL": 3,
+      "SHFL": 4
+    },
+    "_ZN15holosphere_s11634s116_blockh4_weight_in_a_imma_sm86EPKmPKaPiPjij": {
+      "IMMA.16832": 1,
+      "LDGSTS": 2,
+      "POPC": 20,
+      "SEL": 5,
+      "SHFL": 8
+    }
+  },
+  "sass_instruction_counts": {
+    "ATOMG": 6,
+    "FMNMX": 31,
+    "HMMA.16816": 2,
+    "IDP": 4,
+    "IMMA.16832": 5,
+    "LDGSTS": 15,
+    "MEMBAR": 26,
+    "MUFU.RSQ": 11,
+    "NANOSLEEP": 6,
+    "POPC": 72,
+    "SEL": 70,
+    "SHFL": 89
+  },
+  "schema": "s116_ptxas_zero_spill_receipt_v1",
+  "source_file": "holosphere_megakernel_sm86.cu",
+  "source_sha256": "bb64939cec09ff2cbab74c79f056a2b7fa89bc1b6e1de6502650701a3d49a0b6"
+}

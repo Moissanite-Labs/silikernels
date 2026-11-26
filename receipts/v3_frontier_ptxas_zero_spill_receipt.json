@@ -1,0 +1,81 @@
+{
+  "arch": "sm_86",
+  "cu_filename": "holosphere_v3_frontier_sm86.cu",
+  "cu_sha256": "61173b2c635f7bce1098b4f72bc92bf6fa9c6ba2b8b7f716d86c921cc94d4707",
+  "kernels": [
+    {
+      "barriers": 0,
+      "cmem0_bytes": 468,
+      "registers": 128,
+      "sass": {
+        "ATOMG_GPU": 0,
+        "BAR_SYNC": 0,
+        "HMMA_16816": 28,
+        "IDP4A": 0,
+        "LDG_128": 0,
+        "LDL": 0,
+        "LOP3": 56,
+        "MEMBAR_GL": 0,
+        "MEMBAR_SYS": 0,
+        "POPC": 0,
+        "RED_SYS": 0,
+        "SHFL": 30,
+        "STL": 0,
+        "total_insns": 2112
+      },
+      "smem_bytes": 6336,
+      "spill_load_bytes": 0,
+      "spill_store_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN7s117_v326s117_chunk32_bwd_wmma_sm86EPKfS1_S1_S1_S1_S1_PfS2_S2_S2_ffffiiiii",
+      "zero_spill": true
+    },
+    {
+      "barriers": 1,
+      "cmem0_bytes": 476,
+      "registers": 52,
+      "sass": {
+        "ATOMG_GPU": 0,
+        "BAR_SYNC": 7,
+        "HMMA_16816": 0,
+        "IDP4A": 24,
+        "LDG_128": 7,
+        "LDL": 0,
+        "LOP3": 119,
+        "MEMBAR_GL": 0,
+        "MEMBAR_SYS": 1,
+        "POPC": 14,
+        "RED_SYS": 1,
+        "SHFL": 57,
+        "STL": 0,
+        "total_insns": 960
+      },
+      "smem_bytes": 13992,
+      "spill_load_bytes": 0,
+      "spill_store_bytes": 0,
+      "stack_frame_bytes": 0,
+      "symbol": "_ZN7s117_v337s117_uniform_cell_16warp_d512_v3_sm86EPKhPK5uint4PKfPK6float3S4_S4_PKjP6float4PfSE_PhSE_Pjffiii",
+      "zero_spill": true
+    }
+  ],
+  "nonzero_spill_kernels": 0,
+  "nvcc_version": "Build cuda_13.4.r13.4/compiler.38855100_0",
+  "sass_instruction_counts": {
+    "ATOMG_GPU": 0,
+    "BAR_SYNC": 7,
+    "HMMA_16816": 28,
+    "IDP4A": 24,
+    "LDG_128": 7,
+    "LDL": 0,
+    "LOP3": 175,
+    "MEMBAR_GL": 0,
+    "MEMBAR_SYS": 1,
+    "POPC": 14,
+    "RED_SYS": 1,
+    "SHFL": 87,
+    "STL": 0,
+    "total_insns": 3072
+  },
+  "schema": "holosphere.track_s117.ptxas_v3_frontier_zero_spill.v1",
+  "total_kernels": 2
+}

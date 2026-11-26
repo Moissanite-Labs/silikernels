@@ -1,0 +1,133 @@
+{
+  "schema": "s116_phase2b_rtx3080_gpu_results_v1",
+  "gpu_name": "NVIDIA GeForce RTX 3080 Laptop GPU",
+  "compute_capability": "8.6",
+  "num_sms": 48,
+  "l2_cache_bytes": 4194304,
+  "max_persisting_l2_cache_bytes": 2883584,
+  "max_persisting_l2_cache_mib": 2.750000,
+  "sm_clock_post_warmup_mhz": 1245,
+  "live_gddr6_stream_triad_gb_s": 355.444133,
+  "occupancy_blocks_per_sm": {
+    "uniform_cell_8warp_sm86": 3,
+    "uniform_cell_megakernel_sm86": 4,
+    "holosphere_persistent_vm_sm86": 6
+  },
+  "phase2b_live_parity": {
+    "fmnmx_onehot_nan_desyncs": 0,
+    "fmnmx_onehot_imma_max_int32_diff": 0,
+    "weight_in_a_imma_max_int32_diff": 0,
+    "weight_in_a_valid_syndrome_errors": 0,
+    "weight_in_a_injected_16_flips_caught": 16,
+    "cell8warp_2cta_l2_tokens_verified": 64,
+    "cell8warp_2cta_syndrome_errors": 0,
+    "cell8warp_2cta_nan_desyncs": 0,
+    "cell8warp_2cta_passb_max_int32_diff": 0,
+    "cell8warp_2cta_16b_pi_t0_rollback_max_drift": 0.000000,
+    "all_parity_pass": true
+  },
+  "h16a_v2_matched_12layer_showdown": {
+    "n_layers": 12,
+    "bench_tokens": 512,
+    "uniform_cell_8warp_d256_1cta": {
+      "registers": 75,
+      "smem_bytes": 4680,
+      "grid_sync_calls": 0,
+      "active_warps_per_cta": 8,
+      "host_launches_per_tok": 0,
+      "tokens_verified": 1088,
+      "us_per_tok": 33.686582,
+      "pipelined_depth8_us_per_tok": 33.841180,
+      "mj_per_tok": 0.461843,
+      "rapl_mj_per_tok": 1.850244,
+      "mean_watts": 13.710000,
+      "mean_sm_clock_mhz": 1245.000000,
+      "nvml_samples": 3,
+      "speedup_vs_switch_vm_1cta": 2.270739,
+      "speedup_vs_switch_vm_48cta": 9.123788,
+      "speedup_vs_perop_12l_48": 2.970008,
+      "speedup_vs_perop_150": 16.769861,
+      "pipelined_speedup_vs_switch_vm_48cta": 9.082107,
+      "pipelined_speedup_vs_perop_12l_48": 2.956440
+    },
+    "uniform_cell_8warp_d512_2cta_l2_barrier": {
+      "registers": 75,
+      "grid_sync_calls": 0,
+      "l2_acq_rel_barriers_per_tok": 13,
+      "active_warps_total": 16,
+      "host_launches_per_tok": 0,
+      "tokens_verified": 1088,
+      "us_per_tok": 68.216000,
+      "pipelined_depth8_us_per_tok": 67.946867,
+      "est_ns_per_l2_barrier": 2623.514423,
+      "mj_per_tok": 0.935241,
+      "rapl_mj_per_tok": 3.779879,
+      "mean_watts": 13.710000,
+      "mean_sm_clock_mhz": 1245.000000,
+      "nvml_samples": 7
+    },
+    "switch_opcode_vm_12l_1cta": {
+      "registers": 80,
+      "host_launches_per_tok": 0,
+      "tokens_verified": 576,
+      "us_per_tok": 76.493445,
+      "mj_per_tok": 1.048725,
+      "mean_watts": 13.710000,
+      "mean_sm_clock_mhz": 1245.000000,
+      "nvml_samples": 8
+    },
+    "switch_opcode_vm_12l_48cta": {
+      "registers": 80,
+      "host_launches_per_tok": 0,
+      "tokens_verified": 576,
+      "us_per_tok": 307.349223,
+      "mj_per_tok": 4.213758,
+      "mean_watts": 13.710000,
+      "mean_sm_clock_mhz": 1245.000000,
+      "nvml_samples": 31
+    },
+    "async_cpp_per_op_12l_48": {
+      "host_launches_per_tok": 48,
+      "us_per_tok": 100.049424,
+      "mj_per_tok": 1.371678,
+      "mean_watts": 13.710000,
+      "mean_sm_clock_mhz": 1245.000000,
+      "nvml_samples": 11
+    },
+    "async_cpp_per_op_150": {
+      "host_launches_per_tok": 150,
+      "us_per_tok": 564.919297
+    }
+  },
+  "h16c_v2_l2_persistence_and_weight_in_a": {
+    "core_bytes": 1474560,
+    "pinned_bytes_t2048": 1484800,
+    "pinned_bytes_t8192": 1484800,
+    "clamp_4mib_request_to_bytes": 2883584,
+    "clamp_exact_ga104m_ceiling": true,
+    "t2048_24mib_polluted_1pass_unpinned_gb_s": 168.771889,
+    "t2048_24mib_polluted_1pass_pinned_gb_s": 252.190867,
+    "t2048_pin_speedup": 1.494271,
+    "t8192_96mib_polluted_1pass_unpinned_gb_s": 179.496043,
+    "t8192_96mib_polluted_1pass_pinned_gb_s": 245.637181,
+    "t8192_1pass_pin_speedup": 1.368482,
+    "t8192_96mib_polluted_4pass_unpinned_gb_s": 442.014391,
+    "t8192_96mib_polluted_4pass_pinned_gb_s": 525.455681,
+    "t8192_4pass_pin_speedup": 1.188775,
+    "weight_in_a_n8_tiles": 4096,
+    "weight_in_a_n8_us": 8.314880,
+    "weight_in_a_n8_us_per_branch": 1.039360,
+    "weight_in_a_n8_tops": 4.035468,
+    "weight_in_b_ref_us": 14.251519,
+    "weight_in_b_ref_tops": 2.354446,
+    "weight_in_a_vs_b_tops_ratio": 1.713978
+  },
+  "memory_footprint_accounting": {
+    "cellop_looped_blockh4_weights_bytes": 1474560,
+    "cellop_fixed_o1_recurrent_state_bytes": 14336,
+    "transformer_12l_d256_kv_cache_t2048_bytes": 25165824,
+    "transformer_12l_d256_kv_cache_t8192_bytes": 100663296,
+    "state_compression_ratio_t2048": 1755.428571,
+    "state_compression_ratio_t8192": 7021.714286
+  }
+}
