@@ -77,3 +77,5 @@ $(BUILD)/libsu2_holonomy_scan_sm86.so: cuda/sm86/su2_holonomy_scan_sm86.cu | $(B
 
 clean:
 	rm -rf ./build
+
+include cpu/avx512/holosphere_v3_avx512.mk
