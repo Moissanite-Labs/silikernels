@@ -3,7 +3,7 @@
 
 Zero-float, zero-ast.Div, zero-ast.FloorDiv, pure-stdlib, self-bound on-disk verifier for:
   1. Strict canonical-JSON & duplicate-key-free loading (with 1 MiB file cap, integer digit
-     cap, iterative MAX_JSON_DEPTH=32, float rejection, root-to-leaf dir_fd O_NOFOLLOW |
+     cap, pre-parse & iterative MAX_JSON_DEPTH=32, float rejection, root-to-leaf dir_fd O_NOFOLLOW |
      O_NONBLOCK + S_ISDIR/S_ISREG refusal across all verified files and Path(__file__), and
      single-fd read-once hashing) with exact key allowlists and on-disk SHA-256 bindings across
      both CUDA sources, the standalone UTF-8 BPB study script, pinned external corpus hashes
@@ -442,6 +442,29 @@ def _read_rel_bytes_nofollow(repo_root: Path, rel: str, *, max_bytes: int = MAX_
     return _read_abs_path_nofollow(repo_root.joinpath(rel), max_bytes=max_bytes)
 
 
+def _check_raw_json_nesting_depth(text: str, *, max_depth: int = MAX_JSON_DEPTH) -> None:
+    """Enforce bounded container nesting depth prior to json.loads via string-aware bracket/brace scan."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in ("{", "["):
+            depth += 1
+            require_ok(depth <= max_depth, "JSON_DEPTH_LIMIT", f"depth={depth}")
+        elif ch in ("}", "]"):
+            if depth > 0:
+                depth -= 1
+
+
 def _check_json_depth(obj: Any, *, max_depth: int = MAX_JSON_DEPTH) -> None:
     stack: List[Tuple[Any, int]] = [(obj, 0)]
     while stack:
@@ -458,6 +481,7 @@ def _check_json_depth(obj: Any, *, max_depth: int = MAX_JSON_DEPTH) -> None:
 def parse_strict_canonical_json_bytes(raw_bytes: bytes, *, name: str) -> Any:
     try:
         text = raw_bytes.decode("ascii")
+        _check_raw_json_nesting_depth(text)
         parsed = json.loads(
             text,
             object_pairs_hook=_no_dup_object_pairs,
@@ -471,7 +495,9 @@ def parse_strict_canonical_json_bytes(raw_bytes: bytes, *, name: str) -> Any:
         ).encode("ascii")
     except Monarch2HeadVerifyError:
         raise
-    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
+    except RecursionError as exc:
+        raise Monarch2HeadVerifyError("JSON_DEPTH_LIMIT", f"{name}: RecursionError") from exc
+    except (UnicodeDecodeError, ValueError) as exc:
         raise Monarch2HeadVerifyError("READ_OR_PARSE_ERROR", f"{name}: {type(exc).__name__}") from exc
     require_ok(raw_bytes == expected_raw, "RAW_JSON_NOT_CANONICAL", f"non-canonical bytes in {name}")
     return parsed

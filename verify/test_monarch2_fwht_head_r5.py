@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 VERIFY_DIR = Path(__file__).resolve().parent
 REPO_ROOT = VERIFY_DIR.parent
@@ -985,18 +986,81 @@ class TestMonarch2FwhtHead(unittest.TestCase):
             finally:
                 unreadable_p.chmod(0o600)
 
-            # Iterative JSON depth cap exact boundary (MAX_JSON_DEPTH passes; +1 and deep-2000 fail JSON_DEPTH_LIMIT)
+            # Pre-parse + iterative JSON depth cap exact boundary (MAX_JSON_DEPTH passes; +1 and deep-2000 fail JSON_DEPTH_LIMIT)
             d_ok = {"a": 1}
             for _ in range(vm.MAX_JSON_DEPTH - 1):
                 d_ok = [d_ok]
             vm._check_json_depth(d_ok)
             self.assertCode("JSON_DEPTH_LIMIT", vm._check_json_depth, [d_ok])
+
+            d_ok_bytes = (
+                json.dumps(d_ok, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n"
+            ).encode("ascii")
+            self.assertEqual(vm.parse_strict_canonical_json_bytes(d_ok_bytes, name="ok32.json"), d_ok)
+
+            vm._check_raw_json_nesting_depth("[" * vm.MAX_JSON_DEPTH + "]" * vm.MAX_JSON_DEPTH)
+            vm._check_raw_json_nesting_depth("{" * vm.MAX_JSON_DEPTH + "}" * vm.MAX_JSON_DEPTH)
             self.assertCode(
                 "JSON_DEPTH_LIMIT",
-                vm.parse_strict_canonical_json_bytes,
-                (b"[" * 2000) + (b"]" * 2000),
-                name="deep.json",
+                vm._check_raw_json_nesting_depth,
+                "[" * (vm.MAX_JSON_DEPTH + 1) + "]" * (vm.MAX_JSON_DEPTH + 1),
             )
+            self.assertCode(
+                "JSON_DEPTH_LIMIT",
+                vm._check_raw_json_nesting_depth,
+                "{" * (vm.MAX_JSON_DEPTH + 1) + "}" * (vm.MAX_JSON_DEPTH + 1),
+            )
+            vm._check_raw_json_nesting_depth("[" + "{}" * 40 + "]")
+            vm._check_raw_json_nesting_depth("[" + "[]" * 40 + "]")
+            self.assertCode(
+                "JSON_DEPTH_LIMIT",
+                vm._check_raw_json_nesting_depth,
+                ("]" * 40) + ("[" * (vm.MAX_JSON_DEPTH + 1)) + ("]" * (vm.MAX_JSON_DEPTH + 1)),
+            )
+            str_ok_val = 'x"y\\z' + ("[" * 40) + ("{" * 40)
+            str_ok_bytes = (
+                json.dumps({"a": str_ok_val}, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n"
+            ).encode("ascii")
+            self.assertEqual(vm.parse_strict_canonical_json_bytes(str_ok_bytes, name="str_ok.json")["a"], str_ok_val)
+            self.assertCode(
+                "JSON_DEPTH_LIMIT",
+                vm._check_raw_json_nesting_depth,
+                '{"a": "x\\\\"' + ("[" * (vm.MAX_JSON_DEPTH + 1)) + ("]" * (vm.MAX_JSON_DEPTH + 1)) + "}",
+            )
+
+            with mock.patch.object(
+                vm.json,
+                "loads",
+                side_effect=RuntimeError("json.loads must not run on over-depth JSON"),
+            ):
+                self.assertCode(
+                    "JSON_DEPTH_LIMIT",
+                    vm.parse_strict_canonical_json_bytes,
+                    (b"[" * 2000) + (b"]" * 2000),
+                    name="deep.json",
+                )
+                self.assertCode(
+                    "JSON_DEPTH_LIMIT",
+                    vm.parse_strict_canonical_json_bytes,
+                    (b"{" * (vm.MAX_JSON_DEPTH + 1)) + (b"}" * (vm.MAX_JSON_DEPTH + 1)),
+                    name="deep33_obj.json",
+                )
+
+            old_rec_limit = sys.getrecursionlimit()
+            sys.setrecursionlimit(150)
+            try:
+                self.assertEqual(vm.parse_strict_canonical_json_bytes(d_ok_bytes, name="ok32_lowrec.json"), d_ok)
+                self.assertCode(
+                    "JSON_DEPTH_LIMIT",
+                    vm.parse_strict_canonical_json_bytes,
+                    (b"[" * 2000) + (b"]" * 2000),
+                    name="deep_lowrec.json",
+                )
+            finally:
+                sys.setrecursionlimit(old_rec_limit)
+
+            with mock.patch.object(vm.json, "loads", side_effect=RecursionError("simulated recursion limit")):
+                self.assertCode("JSON_DEPTH_LIMIT", vm.parse_strict_canonical_json_bytes, b"{}\n", name="rec.json")
 
             # File size cap exact boundary (MAX_FILE_BYTES passes; MAX_FILE_BYTES + 1 fails FILE_TOO_LARGE)
             max_json_p = tdp / "max_ok.json"
