@@ -1,0 +1,55 @@
+{
+  "arch": "sm_86",
+  "compile_flags": "-O3 -std=c++17 -arch=sm_86 --ptxas-options=-v --Werror all-warnings --shared -Xcompiler -fPIC,-Wall,-Wextra,-Werror",
+  "cu_path": "cuda/sm86/holosphere_monarch2_fwht_head_sm86.cu",
+  "cu_sha256": "eb8a6e5a7ca5f4e5974b27a094a296b894ffc4718084a1d62bb9766a0a10ebc6",
+  "energy_power_status": "UNCONTROLLED_LAPTOP_NOT_CLAIMED",
+  "kernels": {
+    "_ZN24holosphere_monarch2_head31holosphere_arm2b_bias_514b_sm86EPKfPK6__halfS4_Pf": {
+      "barriers": 1,
+      "ldl_insns": 0,
+      "registers": 18,
+      "smem_bytes": 3072,
+      "spill_load_bytes": 0,
+      "spill_store_bytes": 0,
+      "stack_bytes": 0,
+      "stl_insns": 0
+    },
+    "_ZN24holosphere_monarch2_head32holosphere_arm5_bias_2p5kib_sm86EPKfPK7__half2S4_PK6__halfPf": {
+      "barriers": 1,
+      "ldl_insns": 0,
+      "registers": 22,
+      "smem_bytes": 3072,
+      "spill_load_bytes": 0,
+      "spill_store_bytes": 0,
+      "stack_bytes": 0,
+      "stl_insns": 0
+    },
+    "_ZN24holosphere_monarch2_head32holosphere_arm7_bias_8p5kib_sm86EPKfPK5uint4PK6__halfPf": {
+      "barriers": 1,
+      "ldl_insns": 0,
+      "registers": 26,
+      "smem_bytes": 12288,
+      "spill_load_bytes": 0,
+      "spill_store_bytes": 0,
+      "stack_bytes": 0,
+      "stl_insns": 0
+    },
+    "_ZN24holosphere_monarch2_head42holosphere_arm9_monarch2_bias_16p5kib_sm86EPKfPK5uint4S4_PK6__halfPf": {
+      "barriers": 1,
+      "ldl_insns": 0,
+      "registers": 27,
+      "smem_bytes": 20480,
+      "spill_load_bytes": 0,
+      "spill_store_bytes": 0,
+      "stack_bytes": 0,
+      "stl_insns": 0
+    }
+  },
+  "nonzero_spill_kernels": 0,
+  "nvcc_version": "Cuda compilation tools, release 13.4, V13.4.92",
+  "receipt_sha256": "238e1ef75883d60c3d4edf06cbc91b7c1ab9fea389b16ce8224b7b2738891bd0",
+  "schema": "silikernels.sm86.monarch2_fwht_head_ptxas_receipt.v1",
+  "total_kernels": 4,
+  "zero_spill_kernels": 4
+}
