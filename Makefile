@@ -28,7 +28,8 @@ CUDA_BINS := \
 	$(BUILD)/rtx3080_qwen3b_kernels \
 	$(BUILD)/hf_reference_sm86_a16_blockh4 \
 	$(BUILD)/rtx3080_siliquant_a16_kernels \
-	$(BUILD)/rtx3080_qwen15b_kernels
+	$(BUILD)/rtx3080_qwen15b_kernels \
+	$(BUILD)/libsu2_holonomy_scan_sm86.so
 
 .PHONY: all cpu cuda clean check-zero-spill
 
@@ -102,6 +103,9 @@ $(BUILD)/rtx3080_siliquant_a16_kernels: cuda/sm86/rtx3080_siliquant_a16_kernels.
 
 $(BUILD)/rtx3080_qwen15b_kernels: cuda/sm86/rtx3080_qwen15b_kernels.cu | $(BUILD)
 	$(NVCC) $(CUDA_FLAGS) $< -o $@
+
+$(BUILD)/libsu2_holonomy_scan_sm86.so: cuda/sm86/su2_holonomy_scan_sm86.cu | $(BUILD)
+	$(NVCC) $(CUDA_FLAGS) --shared -Xcompiler -fPIC $< -o $@
 
 check-zero-spill:
 	@rm -rf ./build && mkdir -p ./build
