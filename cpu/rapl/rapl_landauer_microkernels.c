@@ -63,6 +63,17 @@ typedef struct {
 
 static channel_desc_t CHANNELS[NUM_CHANNELS];
 
+/* Strict bounded integer parsing (no atoi): rejects trailing garbage, empty
+ * strings, and out-of-range values without signed overflow. */
+static int parse_long_arg(const char *s, long lo, long hi, long *out) {
+    char *end = NULL;
+    errno = 0;
+    long v = strtol(s, &end, 10);
+    if (errno != 0 || end == s || *end != '\0' || v < lo || v > hi) return -1;
+    *out = v;
+    return 0;
+}
+
 static int read_u64_file(const char *path, uint64_t *out) {
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return -1;
@@ -148,7 +159,7 @@ static int init_channels(void) {
         char mpath[280];
         snprintf(mpath, sizeof(mpath), "%s/max_energy_range_uj", rapl_specs[i].dir);
         uint64_t v = 0, mr = 0;
-        if (read_u64_file(CHANNELS[i].path, &v) != 0 || read_u64_file(mpath, &mr) != 0 || mr == 0) {
+        if (read_u64_file(CHANNELS[i].path, &v) != 0 || read_u64_file(mpath, &mr) != 0 || mr == 0 || mr == UINT64_MAX) {
             fprintf(stderr, "ERROR: cannot read RAPL domain %s\n", CHANNELS[i].path);
             return -1;
         }
@@ -342,15 +353,20 @@ static void *worker_main(void *arg) {
         const uint64_t BATCH = 4096ULL;
         while (!atomic_load_explicit(ctx->stop_flag, memory_order_relaxed)) {
             for (uint64_t k = 0; k < BATCH; k++) {
+                uint64_t p0 = a0, q0 = b0, p1 = a1, q1 = b1, p2 = a2, q2 = b2, p3 = a3, q3 = b3;
                 step_r1_bijective_low(&a0, &b0);
                 step_r1_bijective_low(&a1, &b1);
                 step_r1_bijective_low(&a2, &b2);
                 step_r1_bijective_low(&a3, &b3);
+                /* Measured Hamming-distance bit changes (replaces nominal 3/step) */
+                toggles += (uint64_t)(__builtin_popcountll(p0 ^ a0) + __builtin_popcountll(q0 ^ b0)
+                                    + __builtin_popcountll(p1 ^ a1) + __builtin_popcountll(q1 ^ b1)
+                                    + __builtin_popcountll(p2 ^ a2) + __builtin_popcountll(q2 ^ b2)
+                                    + __builtin_popcountll(p3 ^ a3) + __builtin_popcountll(q3 ^ b3));
                 __asm__ volatile("" : "+r"(a0), "+r"(b0), "+r"(a1), "+r"(b1),
                                       "+r"(a2), "+r"(b2), "+r"(a3), "+r"(b3));
             }
             ops += BATCH * 4ULL;
-            toggles += BATCH * 4ULL * 3ULL;
         }
         sink = a0 ^ b0 ^ a1 ^ b1 ^ a2 ^ b2 ^ a3 ^ b3;
     } else if (r == 2) {
@@ -363,17 +379,24 @@ static void *worker_main(void *arg) {
         const uint64_t BATCH = 4096ULL;
         while (!atomic_load_explicit(ctx->stop_flag, memory_order_relaxed)) {
             for (uint64_t k = 0; k < BATCH; k++) {
+                uint64_t p0 = a0, q0 = b0, p1 = a1, q1 = b1, p2 = a2, q2 = b2, p3 = a3, q3 = b3;
                 step_r2_erase_low(&a0, &b0, ctr);
                 step_r2_erase_low(&a1, &b1, ctr + 1ULL);
                 step_r2_erase_low(&a2, &b2, ctr + 2ULL);
                 step_r2_erase_low(&a3, &b3, ctr + 3ULL);
                 ctr++;
+                /* Measured Hamming-distance bit changes (replaces nominal 3/step) */
+                toggles += (uint64_t)(__builtin_popcountll(p0 ^ a0) + __builtin_popcountll(q0 ^ b0)
+                                    + __builtin_popcountll(p1 ^ a1) + __builtin_popcountll(q1 ^ b1)
+                                    + __builtin_popcountll(p2 ^ a2) + __builtin_popcountll(q2 ^ b2)
+                                    + __builtin_popcountll(p3 ^ a3) + __builtin_popcountll(q3 ^ b3));
                 __asm__ volatile("" : "+r"(a0), "+r"(b0), "+r"(a1), "+r"(b1),
                                       "+r"(a2), "+r"(b2), "+r"(a3), "+r"(b3));
             }
             ops += BATCH * 4ULL;
+            /* erased stays a NOMINAL model lower bound (2 bits/step): the map is
+             * many-to-one, so erased bits are not a measurable Hamming distance. */
             erased += BATCH * 4ULL * 2ULL;
-            toggles += BATCH * 4ULL * 3ULL;
         }
         sink = a0 ^ b0 ^ a1 ^ b1 ^ a2 ^ b2 ^ a3 ^ b3 ^ ctr;
     } else if (r == 3) {
@@ -385,15 +408,20 @@ static void *worker_main(void *arg) {
         const uint64_t BATCH = 4096ULL;
         while (!atomic_load_explicit(ctx->stop_flag, memory_order_relaxed)) {
             for (uint64_t k = 0; k < BATCH; k++) {
+                uint64_t p0 = a0, q0 = b0, p1 = a1, q1 = b1, p2 = a2, q2 = b2, p3 = a3, q3 = b3;
                 step_r3_bijective_high(&a0, &b0);
                 step_r3_bijective_high(&a1, &b1);
                 step_r3_bijective_high(&a2, &b2);
                 step_r3_bijective_high(&a3, &b3);
+                /* Measured Hamming-distance bit changes (replaces nominal 127/step) */
+                toggles += (uint64_t)(__builtin_popcountll(p0 ^ a0) + __builtin_popcountll(q0 ^ b0)
+                                    + __builtin_popcountll(p1 ^ a1) + __builtin_popcountll(q1 ^ b1)
+                                    + __builtin_popcountll(p2 ^ a2) + __builtin_popcountll(q2 ^ b2)
+                                    + __builtin_popcountll(p3 ^ a3) + __builtin_popcountll(q3 ^ b3));
                 __asm__ volatile("" : "+r"(a0), "+r"(b0), "+r"(a1), "+r"(b1),
                                       "+r"(a2), "+r"(b2), "+r"(a3), "+r"(b3));
             }
             ops += BATCH * 4ULL;
-            toggles += BATCH * 4ULL * 127ULL;
         }
         sink = a0 ^ b0 ^ a1 ^ b1 ^ a2 ^ b2 ^ a3 ^ b3;
     } else if (r == 4) {
@@ -523,13 +551,28 @@ int main(int argc, char **argv) {
     int settle_ms = 1000;
     const char *out_path = NULL;
 
+    long arg_v = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--samples") == 0 && i + 1 < argc) {
-            samples_per_regime = atoi(argv[++i]);
+            /* Check against MAX_SAMPLES / NUM_REGIMES BEFORE multiplying, so the
+             * signed multiply can never overflow and wrap past the limit. */
+            if (parse_long_arg(argv[++i], 1, MAX_SAMPLES / NUM_REGIMES, &arg_v) != 0) {
+                fprintf(stderr, "ERROR: invalid --samples (need integer in [1, %d])\n", MAX_SAMPLES / NUM_REGIMES);
+                return 2;
+            }
+            samples_per_regime = (int)arg_v;
         } else if (strcmp(argv[i], "--tick-ms") == 0 && i + 1 < argc) {
-            tick_ms = atoi(argv[++i]);
+            if (parse_long_arg(argv[++i], 1, 3600000L, &arg_v) != 0) {
+                fprintf(stderr, "ERROR: invalid --tick-ms (need integer in [1, 3600000])\n");
+                return 2;
+            }
+            tick_ms = (int)arg_v;
         } else if (strcmp(argv[i], "--settle-ms") == 0 && i + 1 < argc) {
-            settle_ms = atoi(argv[++i]);
+            if (parse_long_arg(argv[++i], 0, 3600000L, &arg_v) != 0) {
+                fprintf(stderr, "ERROR: invalid --settle-ms (need integer in [0, 3600000])\n");
+                return 2;
+            }
+            settle_ms = (int)arg_v;
         } else if (strcmp(argv[i], "--output") == 0 && i + 1 < argc) {
             out_path = argv[++i];
         } else {
@@ -537,7 +580,7 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
-    if (samples_per_regime <= 0 || samples_per_regime * NUM_REGIMES > MAX_SAMPLES || tick_ms <= 0 || settle_ms < 0) {
+    if (samples_per_regime <= 0 || samples_per_regime > MAX_SAMPLES / NUM_REGIMES || tick_ms <= 0 || settle_ms < 0) {
         fprintf(stderr, "ERROR: invalid timing args\n");
         return 2;
     }
@@ -617,7 +660,10 @@ int main(int argc, char **argv) {
 
         uint64_t prev_t = now_ns();
         for (int c = 0; c < 5; c++) {
-            if (read_u64_file(CHANNELS[c].path, &prev_rapl[c]) != 0) return 8;
+            if (read_u64_file(CHANNELS[c].path, &prev_rapl[c]) != 0) {
+                fprintf(stderr, "ERROR: initial RAPL read failed on %s (rc 8)\n", CHANNELS[c].path);
+                return 8;
+            }
         }
 
         for (int s = 0; s < blk_samples; s++) {
@@ -633,16 +679,27 @@ int main(int argc, char **argv) {
 
             for (int c = 0; c < 5; c++) {
                 uint64_t cur_e = 0;
-                if (read_u64_file(CHANNELS[c].path, &cur_e) != 0) return 9;
+                if (read_u64_file(CHANNELS[c].path, &cur_e) != 0) {
+                    fprintf(stderr, "ERROR: RAPL read failed on %s (rc 9)\n", CHANNELS[c].path);
+                    return 9;
+                }
+                /* Linux max_energy_range_uj is the counter bitmask, so the wrap
+                 * modulus is max_range + 1 (not max_range); each domain uses its
+                 * own max. cur_e < modulus, so cur_e + modulus - prev cannot
+                 * overflow because modulus <= UINT64_MAX was rejected at init. */
+                const uint64_t mod = CHANNELS[c].max_range + 1ULL;
                 uint64_t diff = (cur_e >= prev_rapl[c])
                                     ? (cur_e - prev_rapl[c])
-                                    : (cur_e + CHANNELS[c].max_range - prev_rapl[c]);
+                                    : (cur_e + mod - prev_rapl[c]);
                 prev_rapl[c] = cur_e;
                 row->vals[c] = (int64_t)diff;
             }
             for (int c = 5; c < NUM_CHANNELS; c++) {
                 int64_t iv = 0;
-                if (read_i64_file(CHANNELS[c].path, &iv) != 0) return 10;
+                if (read_i64_file(CHANNELS[c].path, &iv) != 0) {
+                    fprintf(stderr, "ERROR: channel read failed on %s (rc 10)\n", CHANNELS[c].path);
+                    return 10;
+                }
                 row->vals[c] = iv;
             }
         }
@@ -679,6 +736,7 @@ int main(int argc, char **argv) {
     fprintf(fp, "  \"dram_bytes_per_worker\": %" PRIu64 ",\n", (uint64_t)DRAM_BYTES_PER_WORKER);
     fprintf(fp, "  \"dram_total_bytes\": %" PRIu64 ",\n", (uint64_t)(DRAM_BYTES_PER_WORKER * NUM_WORKERS));
     fprintf(fp, "  \"step_algebra_self_checked\": true,\n");
+    fprintf(fp, "  \"bit_count_semantics\": \"total_toggle_bits_hamming = measured per-step Hamming-distance bit changes for R1-R3 (R0/R4-R6 track no bit state and report 0); total_erased_bits_nominal = nominal model lower bound for R2 (many-to-one map), not a measured bit count\",\n");
     fprintf(fp, "  \"channels\": [\n");
     for (int c = 0; c < NUM_CHANNELS; c++) {
         fprintf(fp, "    {\"idx\": %d, \"name\": \"%s\", \"unit\": \"%s\", \"modality\": \"%s\", \"max_energy_range_uj\": %" PRIu64 "}%s\n",
@@ -688,7 +746,7 @@ int main(int argc, char **argv) {
     fprintf(fp, "  ],\n");
     fprintf(fp, "  \"regimes\": [\n");
     for (int r = 0; r < NUM_REGIMES; r++) {
-        fprintf(fp, "    {\"idx\": %d, \"id\": \"%s\", \"category\": \"%s\", \"n_samples\": %d, \"wall_ns\": %" PRIu64 ", \"total_ops\": %" PRIu64 ", \"total_erased_bits\": %" PRIu64 ", \"total_toggle_bits\": %" PRIu64 ", \"sink_xor_hex\": \"%016" PRIx64 "\"}%s\n",
+        fprintf(fp, "    {\"idx\": %d, \"id\": \"%s\", \"category\": \"%s\", \"n_samples\": %d, \"wall_ns\": %" PRIu64 ", \"total_ops\": %" PRIu64 ", \"total_erased_bits_nominal\": %" PRIu64 ", \"total_toggle_bits_hamming\": %" PRIu64 ", \"sink_xor_hex\": \"%016" PRIx64 "\"}%s\n",
                 r, REGIMES[r].id, REGIMES[r].category, summaries[r].n_samples,
                 summaries[r].wall_ns, summaries[r].total_ops,
                 summaries[r].total_erased_bits, summaries[r].total_toggle_bits,

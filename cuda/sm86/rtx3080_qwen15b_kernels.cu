@@ -656,18 +656,45 @@ int main(int argc, char** argv) {
     //   x_real_f32 [K] (real captured Qwen2.5-1.5B activation vector!)
     std::ifstream ifs(argv[1], std::ios::binary);
     if (!ifs) { fprintf(stderr, "Cannot open %s\n", argv[1]); return 2; }
-    char magic[4];
+    char magic[4] = {0, 0, 0, 0};
     int32_t M = 0, K = 0;
     float top18 = 0.0f;
     ifs.read(magic, 4);
-    if (memcmp(magic, "S60B", 4) != 0) { fprintf(stderr, "Bad magic\n"); return 2; }
+    if (ifs.gcount() != 4 || memcmp(magic, "S60B", 4) != 0) { fprintf(stderr, "Bad magic\n"); return 2; }
     ifs.read(reinterpret_cast<char*>(&M), 4);
     ifs.read(reinterpret_cast<char*>(&K), 4);
     ifs.read(reinterpret_cast<char*>(&top18), 4);
+    if (!ifs || ifs.gcount() != 4) { fprintf(stderr, "Truncated header\n"); return 2; }
 
-    const size_t n_w = (size_t)M * (size_t)K;
+    // Fail-closed validation BEFORE any size math, allocation, or launch:
+    // M/K positive and bounded, K divisible by the 32/128-group layouts (and 16
+    // for the packed nibble arrays), total weight count overflow-safe and
+    // divisible by 128, scale finite, and the exact file length matches.
+    if (M <= 0 || K <= 0 || M > (1 << 24) || K > (1 << 24) || (K % 128) != 0 || !std::isfinite(top18)) {
+        fprintf(stderr, "Invalid bundle header: M=%d K=%d top18=%g (need M,K in [1,2^24], K%%128==0, finite top18)\n",
+                M, K, (double)top18);
+        return 2;
+    }
+    const uint64_t n_w64 = (uint64_t)(uint32_t)M * (uint64_t)(uint32_t)K;
+    if (n_w64 > (1ULL << 32) || (n_w64 % 128) != 0) {
+        fprintf(stderr, "Invalid bundle size: M*K=%llu (need <=2^32 and %%128==0)\n",
+                (unsigned long long)n_w64);
+        return 2;
+    }
+    const size_t n_w = (size_t)n_w64;
     const int g18 = (int)(n_w / 32);
     const int g72 = (int)(n_w / 128);
+    const uint64_t expect_len = 12ULL + 4ULL * n_w64 + (uint64_t)g18 + 4ULL * n_w64 + 2ULL * (uint64_t)g72
+                              + 4ULL * n_w64 + 2ULL * (uint64_t)g18 + 4ULL * n_w64 + 2ULL * (uint64_t)g18
+                              + 4ULL * (uint64_t)(uint32_t)K;
+    ifs.seekg(0, std::ios::end);
+    const int64_t fsize = (int64_t)ifs.tellg();
+    ifs.seekg(12, std::ios::beg);
+    if (fsize < 0 || (uint64_t)fsize != expect_len) {
+        fprintf(stderr, "Bundle length mismatch: file=%lld expected=%llu\n",
+                (long long)fsize, (unsigned long long)expect_len);
+        return 2;
+    }
     std::vector<int8_t> y18(n_w), y72(n_w), y45_a16(n_w), y45_bh2(n_w);
     std::vector<uint8_t> code18(g18);
     std::vector<uint16_t> s72_u16(g72), s45_a16_u16(g18), s45_bh2_u16(g18);
@@ -683,6 +710,9 @@ int main(int argc, char** argv) {
     ifs.read(reinterpret_cast<char*>(s45_bh2_u16.data()), (std::streamsize)(g18 * 2));
     ifs.read(reinterpret_cast<char*>(x_real.data()), (std::streamsize)(K * 4));
     if (!ifs) { fprintf(stderr, "Truncated bundle\n"); return 2; }
+    for (int j = 0; j < K; ++j) {
+        if (!std::isfinite(x_real[j])) { fprintf(stderr, "Non-finite activation at x[%d]\n", j); return 2; }
+    }
 
     cudaEvent_t t0, t1;
     CUDA_CHECK(cudaEventCreate(&t0));
@@ -863,15 +893,25 @@ int main(int argc, char** argv) {
     // C. Benchmark Serving GEMVs on real Qwen2.5-1.5B tensors + CPU FP64 parity
     dim3 block(128), grid((M + 3) / 4);
     std::vector<float> h_y(M);
+    // NaN-safe GEMV error evaluation: a NaN output makes the per-row deviation
+    // !(d <= tol) and fails the check; explicit absolute + relative tolerances.
+    const double ABS_TOL = 1e-2, REL_TOL = 1e-3;
     auto eval_err = [&](const std::vector<double>& ref) -> std::pair<double, double> {
         CUDA_CHECK(cudaMemcpy(h_y.data(), d_y, (size_t)M * 4, cudaMemcpyDeviceToHost));
         double mx = 0.0, num = 0.0, den = 0.0;
         for (int r = 0; r < M; ++r) {
             double d = (double)h_y[r] - ref[r];
-            if (fabs(d) > mx) mx = fabs(d);
+            if (!(fabs(d) <= mx)) mx = fabs(d); /* NaN-safe max */
             num += d * d; den += ref[r] * ref[r];
         }
-        return {mx, sqrt(num / (den + 1e-30))};
+        double rel = sqrt(num / (den + 1e-30));
+        if (!std::isfinite(mx) || !std::isfinite(rel)) { mx = INFINITY; rel = INFINITY; }
+        return {mx, rel};
+    };
+    auto gemv_ok = [&](const std::pair<double, double>& e) {
+        /* !(d <= tol) is false for NaN, so NaN fails closed */
+        return std::isfinite(e.first) && std::isfinite(e.second)
+            && !(e.first > ABS_TOL) && !(e.second > REL_TOL);
     };
 
     const int iters = 200;
@@ -966,5 +1006,12 @@ int main(int argc, char** argv) {
     CUDA_CHECK(cudaFree(d_s45a)); CUDA_CHECK(cudaFree(d_p45b)); CUDA_CHECK(cudaFree(d_s45b)); CUDA_CHECK(cudaFree(d_xi8));
     CUDA_CHECK(cudaFree(d_y)); CUDA_CHECK(cudaFree(d_err));
     CUDA_CHECK(cudaEventDestroy(t0)); CUDA_CHECK(cudaEventDestroy(t1));
-    return (tc18_mism == 0 && tc72_mism == 0 && tc18_syn == 0 && tc72_syn == 0 && syn_gv18 == 0 && syn_gv72 == 0 && syn_gv45a == 0) ? 0 : 4;
+    const bool gemv_all_ok = gemv_ok(err_gv18) && gemv_ok(err_gv72) && gemv_ok(err_gv45a) && gemv_ok(err_gv45b);
+    if (!gemv_all_ok) {
+        fprintf(stderr, "ERROR: GEMV correctness failure: gv18=(%e,%e) gv72=(%e,%e) gv45a=(%e,%e) gv45b=(%e,%e) tol=(abs %g, rel %g)\n",
+                err_gv18.first, err_gv18.second, err_gv72.first, err_gv72.second,
+                err_gv45a.first, err_gv45a.second, err_gv45b.first, err_gv45b.second, ABS_TOL, REL_TOL);
+    }
+    return (tc18_mism == 0 && tc72_mism == 0 && tc18_syn == 0 && tc72_syn == 0
+            && syn_gv18 == 0 && syn_gv72 == 0 && syn_gv45a == 0 && gemv_all_ok) ? 0 : 4;
 }

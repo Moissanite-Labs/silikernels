@@ -22,6 +22,19 @@
     }                                                                         \
 } while (0)
 
+// Correctness failures that must affect the process exit status (fail closed):
+// pool round-trip mismatches, syndrome errors, and fused-GEMV FP64 deviations
+// are accumulated here instead of being only printed.
+static uint64_t g_bench_failures = 0;
+static void note_bench_failure(uint64_t n) { g_bench_failures += n; }
+
+// NaN-safe tolerance check: !(d <= tol) is false for NaN, so NaN fails closed.
+static const double GEMV_ABS_TOL = 1e-2, GEMV_REL_TOL = 1e-3;
+static int bench_gemv_err_ok(double max_abs, double rel_l2) {
+    return std::isfinite(max_abs) && std::isfinite(rel_l2)
+        && !(max_abs > GEMV_ABS_TOL) && !(rel_l2 > GEMV_REL_TOL);
+}
+
 // ---------------------------------------------------------------------------
 // Section 1: Ampere sm_86 Roofline Microbenchmarks (AC 110W P0 Calibration)
 // ---------------------------------------------------------------------------
@@ -791,6 +804,11 @@ static void run_gemv_shape(int M, int K, double triad_gbs, cudaEvent_t t0, cudaE
         CUDA_CHECK(cudaMemcpy(h_y.data(), d_y, ref_rows * sizeof(float), cudaMemcpyDeviceToHost));
         double max_abs = 0.0, rel_l2 = 0.0;
         compute_fp64_errors(h_y, ref_vec, max_abs, rel_l2);
+        if (h_err != 0u || !bench_gemv_err_ok(max_abs, rel_l2)) {
+            fprintf(stderr, "ERROR: arm %s correctness failure (syn=%u max_abs=%.9e rel_l2=%.9e)\n",
+                    name, h_err, max_abs, rel_l2);
+            note_bench_failure(1u);
+        }
         for (int i = 0; i < warmup; ++i) launch_fast();
         CUDA_CHECK(cudaDeviceSynchronize());
         CUDA_CHECK(cudaEventRecord(t0));
@@ -1497,7 +1515,9 @@ __global__ void hammingindex_72b_fused_gemv_kernel(
                     if (u576_lt(k, ways)) { th = u; found_t = 1; break; }
                     u576_sub(k, ways);
                 }
-                if (CHECK_SYN && !found_t) bad = 1u;
+                // Never divide after a failed shell search: an out-of-range rank
+                // would violate u576_shl_le127's 0..127 shift precondition (UB).
+                if (!found_t) bad = 1u;
                 else blk_idx = u576_divmod_u128(k, per);
             }
             left_half -= th;
@@ -1536,6 +1556,32 @@ __global__ void hammingindex_72b_fused_gemv_kernel(
     acc = warp_reduce_sum(acc);
     if (lane == 0) y[warp_id] = acc;
     if (CHECK_SYN && bad) atomicAdd(err_count, 1u);
+}
+
+/* Host mirror of standalone_a16_decode_kernel's repair, used as an independent
+ * reference so the 67M-weight decode output is actually compared (exit status). */
+static void host_a16_repair_block(const int8_t in16[16], int8_t out16[16]) {
+    uint32_t bits = 0;
+    int min_abs = 256, min_idx = 0;
+    for (int i = 0; i < 16; ++i) {
+        int val = (int)in16[i];
+        bits |= ((uint32_t)(val & 1)) << i;
+        int av = val < 0 ? -val : val;
+        if (av < min_abs) { min_abs = av; min_idx = i; }
+    }
+    uint32_t p0 = popc_portable(bits) & 1u;
+    uint32_t syn = (popc_portable(bits & 0xAAAAu) & 1u)
+                 | ((popc_portable(bits & 0xCCCCu) & 1u) << 1)
+                 | ((popc_portable(bits & 0xF0F0u) & 1u) << 2)
+                 | ((popc_portable(bits & 0xFF00u) & 1u) << 3);
+    uint32_t flip_mask = p0
+        ? (1u << syn)
+        : ((syn != 0u) ? ((1u << min_idx) | (1u << (min_idx ^ (int)syn))) : 0u);
+    for (int i = 0; i < 16; ++i) {
+        int do_flip = (int)((flip_mask >> i) & 1u);
+        int val = (int)in16[i];
+        out16[i] = (int8_t)(val + ((val >= 0) ? -do_flip : do_flip));
+    }
 }
 
 static void snap_a16_host_exact(int8_t* v16) {
@@ -1685,6 +1731,10 @@ static void run_siliquant_hampack_benchmarks(double triad_gbs, cudaEvent_t t0, c
         }
     }
     CUDA_CHECK(cudaFree(d_p18)); CUDA_CHECK(cudaFree(d_out18));
+    if (bit_mism18 != 0u || syn18_pool != 0u) {
+        fprintf(stderr, "ERROR: 18B pool round-trip failure (bit_mism=%u syn=%u)\n", bit_mism18, syn18_pool);
+        note_bench_failure((uint64_t)bit_mism18 + syn18_pool);
+    }
 
     CUDA_CHECK(cudaMalloc(&d_p72, pool72_rec.size()));
     CUDA_CHECK(cudaMemcpy(d_p72, pool72_rec.data(), pool72_rec.size(), cudaMemcpyHostToDevice));
@@ -1706,6 +1756,10 @@ static void run_siliquant_hampack_benchmarks(double triad_gbs, cudaEvent_t t0, c
         }
     }
     CUDA_CHECK(cudaFree(d_p72)); CUDA_CHECK(cudaFree(d_out72));
+    if (bit_mism72 != 0u || syn72_pool != 0u) {
+        fprintf(stderr, "ERROR: 72B pool round-trip failure (bit_mism=%u syn=%u)\n", bit_mism72, syn72_pool);
+        note_bench_failure((uint64_t)bit_mism72 + syn72_pool);
+    }
 
     // Benchmark helper for BOTH standalone decode & fused GEMV at M x K
     auto bench_shape = [&](int M, int K, bool first) {
@@ -1799,6 +1853,11 @@ static void run_siliquant_hampack_benchmarks(double triad_gbs, cudaEvent_t t0, c
             num18 += d * d; den18 += ref18[r] * ref18[r];
         }
         double rel18 = sqrt(num18 / (den18 + 1e-30));
+        if (err18_sa != 0u || err18_gv != 0u || !bench_gemv_err_ok(max18, rel18)) {
+            fprintf(stderr, "ERROR: 18B fused shape %dx%d failure (sa=%u gv=%u max_abs=%.9e rel=%.9e)\n",
+                    M, K, err18_sa, err18_gv, max18, rel18);
+            note_bench_failure(1u);
+        }
         CUDA_CHECK(cudaEventRecord(t0));
         for (int i = 0; i < it18; ++i)
             hampack_18b_fused_gemv_kernel<false><<<grid, block>>>(d_r18, d_ways, d_scale_lut, d_x, d_y, d_err, M, K);
@@ -1840,6 +1899,11 @@ static void run_siliquant_hampack_benchmarks(double triad_gbs, cudaEvent_t t0, c
             num72 += d * d; den72 += ref72[r] * ref72[r];
         }
         double rel72 = sqrt(num72 / (den72 + 1e-30));
+        if (err72_sa != 0u || err72_gv != 0u || !bench_gemv_err_ok(max72, rel72)) {
+            fprintf(stderr, "ERROR: 72B fused shape %dx%d failure (sa=%u gv=%u max_abs=%.9e rel=%.9e)\n",
+                    M, K, err72_sa, err72_gv, max72, rel72);
+            note_bench_failure(1u);
+        }
         CUDA_CHECK(cudaEventRecord(t0));
         for (int i = 0; i < it72; ++i)
             hammingindex_72b_fused_gemv_kernel<false><<<grid, block>>>(d_r72, d_shell_p, d_S_even, d_after_e, d_x, d_y, d_err, M, K);
@@ -2000,6 +2064,23 @@ int main() {
     CUDA_CHECK(cudaEventSynchronize(t1));
     CUDA_CHECK(cudaEventElapsedTime(&ms, t0, t1));
     CUDA_CHECK(cudaMemcpy(&h_err, d_err, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+    /* Compare the 67M-weight decode output against an independent host reference
+     * (the decoder self-repairs before syndrome check, so h_err alone is always 0). */
+    {
+        std::vector<int8_t> h_out(qbytes);
+        CUDA_CHECK(cudaMemcpy(h_out.data(), d_qout, qbytes, cudaMemcpyDeviceToHost));
+        std::vector<int8_t> ref(16);
+        uint64_t mism = 0u;
+        for (int b = 0; b < N_BLOCKS; ++b) {
+            host_a16_repair_block(h_in.data() + (size_t)b * 16, ref.data());
+            if (memcmp(ref.data(), h_out.data() + (size_t)b * 16, 16) != 0) ++mism;
+        }
+        if (mism != 0u) {
+            fprintf(stderr, "ERROR: standalone A16 decode mismatch on %llu of %d blocks\n",
+                    (unsigned long long)mism, N_BLOCKS);
+            note_bench_failure(mism);
+        }
+    }
     double sa_a16_ms = (double)ms / qiters;
     double sa_a16_gw = ((double)N_BLOCKS * 16.0) / (sa_a16_ms * 1e6);
     double sa_a16_gbs = (2.0 * (double)qbytes) / (sa_a16_ms * 1e6);
@@ -2070,5 +2151,10 @@ int main() {
 
     CUDA_CHECK(cudaEventDestroy(t0));
     CUDA_CHECK(cudaEventDestroy(t1));
+    if (g_bench_failures != 0u) {
+        fprintf(stderr, "ERROR: %llu correctness failure(s) detected during benchmark\n",
+                (unsigned long long)g_bench_failures);
+        return 2;
+    }
     return (h_err == 0u) ? 0 : 2;
 }

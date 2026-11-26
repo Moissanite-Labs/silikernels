@@ -21,6 +21,7 @@
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -449,6 +450,7 @@ typedef struct {
     uint8_t *d8_meta;       /* (coset << 7) | shape_id (0..21) */
     uint8_t *d8_sbits;      /* 0..8 */
     uint32_t *d8_shell_off; /* length m_max + 2 */
+    uint64_t *d8_shell_tot; /* length m_max + 1: total D_8^+ vectors per shell m */
     uint8_t *d8_guide_sh;   /* length m_max + 1 */
     uint32_t *d8_guide_idx; /* (m_max + 1) * D8_G_NB */
     /* Universal 22-shape pshufb table (95,503 x 8 = 764,024 B) + 510B binomial mask table */
@@ -736,6 +738,7 @@ static void build_d8plus_tables(int m_max) {
     d8_gen_od(&gen, 0, hi_od, gen.max_od, -1, 0, 1u);
 
     g_e8.d8_shell_off = (uint32_t *)malloc((M1 + 1u) * sizeof(uint32_t));
+    g_e8.d8_shell_tot = (uint64_t *)calloc(M1, sizeof(uint64_t));
     uint32_t tot = 0u;
     for (int m = 0; m <= m_max; ++m) {
         g_e8.d8_shell_off[m] = tot;
@@ -769,6 +772,7 @@ static void build_d8plus_tables(int m_max) {
             g_e8.d8_leaders[i].cdf = acc;
             acc += orb;
         }
+        g_e8.d8_shell_tot[m] = acc; /* total vectors in shell m (rk valid range) */
         uint32_t tb = bit_length_u64(acc > 0u ? acc - 1u : 0u);
         uint8_t sh = (tb > D8_G_KBITS) ? (uint8_t)(tb - D8_G_KBITS) : 0u;
         g_e8.d8_guide_sh[m] = sh;
@@ -915,6 +919,7 @@ static void e8s1_free(void) {
     free(g_e8.d8_meta);
     free(g_e8.d8_sbits);
     free(g_e8.d8_shell_off);
+    free(g_e8.d8_shell_tot);
     free(g_e8.d8_guide_sh);
     free(g_e8.d8_guide_idx);
     free(g_e8.shape_pshufb);
@@ -957,6 +962,78 @@ int e8s1_init(
 ) {
     if (m_max < 3 || m_max > 2048 || bytes < 1 || bytes > 24) return 1;
     e8s1_free();
+    /* Fail closed on narrowed tables: every value that init stores into a
+     * uint16_t (c4, q_*_p0, f88 cdfs), uint8_t (c2), or -- in the 88b path --
+     * uint32_t (w_blk1, even_c8, p0 totals, f88 8->4 cdfs) must actually fit.
+     * Accepted m_max values whose tables overflow (e.g. c4 > UINT16_MAX at
+     * m_max >= 1490) are rejected here instead of silently decoding wrong. */
+    {
+        const int r_max_c = 2 * m_max;
+        const int t_max_c = m_max - 1;
+        const size_t R1c = (size_t)r_max_c + 1u;
+        const size_t T1c = (size_t)t_max_c + 1u;
+        for (int p = 0; p < 2; ++p) {
+            for (size_t i = 0; i < R1c; ++i) {
+                if (even_c4_in[p * R1c + i] > 0xFFFFu || even_c2_in[p * R1c + i] > 0xFFu) {
+                    fprintf(stderr, "e8s1_init: reject m_max=%d: even c4/c2 exceeds uint16/uint8 width at p=%d i=%zu\n",
+                            m_max, p, i);
+                    return 1;
+                }
+            }
+            for (size_t i = 0; i < T1c; ++i) {
+                if (odd_c4_in[p * T1c + i] > 0xFFFFu || odd_c2_in[p * T1c + i] > 0xFFu) {
+                    fprintf(stderr, "e8s1_init: reject m_max=%d: odd c4/c2 exceeds uint16/uint8 width at p=%d i=%zu\n",
+                            m_max, p, i);
+                    return 1;
+                }
+            }
+        }
+        for (int pa = 0; pa < 2; ++pa) {
+            for (int pb = 0; pb < 2; ++pb) {
+                for (int r = 0; r <= r_max_c; ++r) {
+                    uint64_t acc = 0u;
+                    for (int na = 0; na <= r; ++na)
+                        acc += (uint64_t)even_c2_in[(size_t)pa * R1c + na] * even_c2_in[(size_t)pb * R1c + (r - na)];
+                    if (acc > 0xFFFFu) {
+                        fprintf(stderr, "e8s1_init: reject m_max=%d: even 4->2 cdf total %llu exceeds uint16 at r=%d\n",
+                                m_max, (unsigned long long)acc, r);
+                        return 1;
+                    }
+                }
+                for (int t = 0; t <= t_max_c; ++t) {
+                    uint64_t acc = 0u;
+                    for (int na = 0; na <= t; ++na)
+                        acc += (uint64_t)odd_c2_in[(size_t)pa * T1c + na] * odd_c2_in[(size_t)pb * T1c + (t - na)];
+                    if (acc > 0xFFFFu) {
+                        fprintf(stderr, "e8s1_init: reject m_max=%d: odd 4->2 cdf total %llu exceeds uint16 at t=%d\n",
+                                m_max, (unsigned long long)acc, t);
+                        return 1;
+                    }
+                }
+            }
+        }
+        if (m_max <= 64) { /* 88b path consumes the uint32-narrowed copies */
+            for (int i = 0; i <= m_max; ++i) {
+                if (w_blk1_in[i] > 0xFFFFFFFFULL || even_c8_in[i] > 0xFFFFFFFFULL) {
+                    fprintf(stderr, "e8s1_init: reject m_max=%d: w_blk1/even_c8 exceeds uint32 at i=%d\n", m_max, i);
+                    return 1;
+                }
+            }
+            for (int p = 0; p < 2; ++p) {
+                for (int m = 0; m <= m_max; ++m) {
+                    const int r8 = 2 * m;
+                    uint64_t acc = 0u;
+                    for (int a = 0; a <= r8; ++a)
+                        acc += (uint64_t)even_c4_in[(size_t)p * R1c + a] * even_c4_in[(size_t)p * R1c + (r8 - a)];
+                    if (acc > 0xFFFFFFFFULL) {
+                        fprintf(stderr, "e8s1_init: reject m_max=%d: even 8->4 cdf total %llu exceeds uint32 at m=%d\n",
+                                m_max, (unsigned long long)acc, m);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
     int r_max = 2 * m_max;
     int t_max = m_max - 1;
     size_t M1 = (size_t)m_max + 1u;
@@ -2422,8 +2499,22 @@ size_t e8s1_decode_z_d8_pshufb(const uint8_t *in, size_t groups, int8_t *Z) {
     return bad;
 }
 
-/* Direct standalone D_8^+ leaf unranker for exhaustive m=0..3 bijection verification */
+/* Shell vector count for D_8^+ shell m, or -1 if the context is not initialized
+ * or m is out of range. */
+int64_t e8s1_d8_shell_count(int m) {
+    if (!g_e8_ready || m < 0 || m > g_e8.m_max) return -1;
+    return (int64_t)g_e8.d8_shell_tot[m];
+}
+
+/* Direct standalone D_8^+ leaf unranker for exhaustive m=0..3 bijection verification.
+ * Fail closed: validates init, m range, and rk < shell_count(m) before dispatch;
+ * an invalid request zeroes out8 instead of indexing the guide tables OOB. */
 void e8s1_d8_unrank_shell_vec(int m, uint64_t rk, int use_pshufb, int8_t *out8) {
+    int64_t sc = e8s1_d8_shell_count(m);
+    if (sc < 0 || rk >= (uint64_t)sc) {
+        memset(out8, 0, 8u);
+        return;
+    }
     if (use_pshufb) unrank_e8_d8_pshufb(rk, 0, m, out8);
     else            unrank_e8_d8_compact(rk, 0, m, out8);
 }
@@ -2438,6 +2529,9 @@ static inline size_t gemv_adjoint_impl(
     size_t cols,
     float *y_out
 ) {
+    /* Fail closed on unaligned widths: wht8_f32_vector + dot load 8/32 floats
+     * per step, so cols must be a positive multiple of 32. */
+    if (!g_e8_ready || cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     size_t bad = 0u;
     const size_t nb = (size_t)g_e8.bytes;
     const size_t rec_sz = nb + 1u;
@@ -2485,6 +2579,8 @@ size_t e8s1_gemv_materialized_variant(
     int variant, const uint8_t *records, const float *scale_lut, const float *x,
     size_t rows, size_t cols, float *y_out
 ) {
+    /* Fail closed on unaligned widths (see gemv_adjoint_impl). */
+    if (!g_e8_ready || cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     size_t bad = 0u;
     const size_t nb = (size_t)g_e8.bytes;
     const size_t rec_sz = nb + 1u;
@@ -2511,6 +2607,8 @@ size_t q4km_style_gemv_avx2(
     const uint8_t *records, const float *scale_lut, const float *x,
     size_t rows, size_t cols, float *y_out
 ) {
+    /* Fail closed on unaligned widths: 32 floats are loaded per 32-weight block. */
+    if (cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     const size_t blk_per_row = cols >> 5;
     for (size_t r = 0; r < rows; ++r) {
         const uint8_t *row_ptr = records + r * blk_per_row * 18u;
@@ -2580,6 +2678,11 @@ size_t e8s1_extract_leaves_from_blocks(
         u128 idx_l, idx_r;
         if (root_split_e8_4(in_blocks + g * nb, &m_l, &idx_l, &idx_r)) {
             ++bad;
+            /* Rejected blocks must not leave leaf outputs uninitialized. */
+            for (int b = 0; b < 4; ++b) {
+                leaf_m_out[g * 4u + (size_t)b] = 0;
+                leaf_ranks_out[g * 4u + (size_t)b] = 0;
+            }
             continue;
         }
         int a0, a1;
@@ -2672,6 +2775,12 @@ uint64_t e8s1_bench_gemv_ns(
     const float *scale_lut, const float *x, size_t rows, size_t cols,
     float *y_out, size_t *bad_out, uint64_t *cpu_ns_out
 ) {
+    /* Fail closed on unaligned widths before any worker is spawned. */
+    if (!g_e8_ready || cols == 0u || (cols & 31u) != 0u) {
+        if (bad_out) *bad_out = rows + 1u;
+        if (cpu_ns_out) *cpu_ns_out = 0u;
+        return 0u;
+    }
     if (threads < 1) threads = 1;
     if (threads > 16) threads = 16;
     if (threads == 1) {

@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,8 +100,8 @@ static void discover_sensors(SensorPaths *sp) {
         snprintf(mpath, sizeof(mpath), "%s/max_energy_range_uj", rapl_dirs[i]);
         int64_t dummy = 0;
         if (read_int64_file(sp->rapl_path[i], &dummy) == 0 &&
-            read_int64_file(mpath, &sp->rapl_max[i]) == 0) {
-            sp->rapl_ok[i] = 1;
+            read_int64_file(mpath, &sp->rapl_max[i]) == 0 && sp->rapl_max[i] > 0) {
+            sp->rapl_ok[i] = 1; /* max must be a positive counter mask (modulus = max+1) */
         }
     }
 
@@ -136,7 +137,8 @@ static void read_rapl_all(const SensorPaths *sp, int64_t out[5]) {
 
 static int64_t rapl_diff(int64_t a, int64_t b, int64_t max_r) {
     if (b >= a) return b - a;
-    return (max_r - a) + b;
+    /* max_energy_range_uj is the counter bitmask: wrap modulus is max_r + 1 */
+    return (max_r + 1 - a) + b;
 }
 
 static int64_t read_cpu_freq_khz(int cpu_id) {
@@ -293,7 +295,9 @@ static void run_jitter_regime(const char *name, size_t bytes, int steps, int n_s
 static volatile int g_active_cores = 0;
 static volatile int g_stop_workers = 0;
 static volatile int g_count_ops = 0;
-static uint64_t g_worker_ops[8];
+/* Atomic (relaxed) counters: workers add while the main thread resets/reads
+ * the same array, so plain uint64_t would be a data race (TSan-confirmed). */
+static _Atomic uint64_t g_worker_ops[8];
 
 static void *burn_worker(void *arg) {
     int cid = *(int *)arg;
@@ -322,7 +326,7 @@ static void *burn_worker(void *arg) {
                 d += (a ^ b);
             }
             if (__atomic_load_n(&g_count_ops, __ATOMIC_RELAXED)) {
-                g_worker_ops[cid] += 1024ULL;
+                atomic_fetch_add_explicit(&g_worker_ops[cid], 1024ULL, memory_order_relaxed);
             }
         } else {
             struct timespec sl = {0, 1000000}; /* 1 ms sleep when inactive */
@@ -378,7 +382,7 @@ int main(int argc, char **argv) {
     __atomic_store_n(&g_count_ops, 0, __ATOMIC_RELEASE);
     for (int i = 0; i < 8; ++i) {
         cids[i] = i;
-        g_worker_ops[i] = 0;
+        atomic_store_explicit(&g_worker_ops[i], 0, memory_order_relaxed);
         pthread_create(&th[i], NULL, burn_worker, &cids[i]);
     }
 
@@ -445,7 +449,7 @@ int main(int argc, char **argv) {
     for (int idx = 0; idx < 5; ++idx) {
         int p = p_levels[idx];
         allo[idx].p_cores = p;
-        for (int c = 0; c < 8; ++c) g_worker_ops[c] = 0;
+        for (int c = 0; c < 8; ++c) atomic_store_explicit(&g_worker_ops[c], 0, memory_order_relaxed);
         __atomic_store_n(&g_count_ops, 0, __ATOMIC_RELEASE);
         __atomic_store_n(&g_active_cores, p, __ATOMIC_RELEASE);
         /* 200 ms ramp settle into steady frequency */
@@ -482,7 +486,7 @@ int main(int argc, char **argv) {
             allo[idx].rapl_uj[r] = rapl_diff(r0[r], r1[r], sp.rapl_max[r]);
         }
         uint64_t ops_sum = 0;
-        for (int c = 0; c < p; ++c) ops_sum += g_worker_ops[c];
+        for (int c = 0; c < p; ++c) ops_sum += atomic_load_explicit(&g_worker_ops[c], memory_order_relaxed);
         allo[idx].total_ops = ops_sum;
         allo[idx].mean_active_khz = (freq_cnt > 0) ? (freq_sum / freq_cnt) : 0;
 

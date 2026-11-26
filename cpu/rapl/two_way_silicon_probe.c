@@ -27,11 +27,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#define RAPL_PKG_PATH    "/sys/class/powercap/intel-rapl:0/energy_uj"
-#define RAPL_CORE_PATH   "/sys/class/powercap/intel-rapl:0:0/energy_uj"
-#define RAPL_UNCORE_PATH "/sys/class/powercap/intel-rapl:0:1/energy_uj"
-#define RAPL_PSYS_PATH   "/sys/class/powercap/intel-rapl:1/energy_uj"
-#define RAPL_MAX_PATH    "/sys/class/powercap/intel-rapl:0/max_energy_range_uj"
+#define RAPL_PKG_PATH        "/sys/class/powercap/intel-rapl:0/energy_uj"
+#define RAPL_CORE_PATH       "/sys/class/powercap/intel-rapl:0:0/energy_uj"
+#define RAPL_UNCORE_PATH     "/sys/class/powercap/intel-rapl:0:1/energy_uj"
+#define RAPL_PSYS_PATH       "/sys/class/powercap/intel-rapl:1/energy_uj"
+#define RAPL_PKG_MAX_PATH    "/sys/class/powercap/intel-rapl:0/max_energy_range_uj"
+#define RAPL_CORE_MAX_PATH   "/sys/class/powercap/intel-rapl:0:0/max_energy_range_uj"
+#define RAPL_UNCORE_MAX_PATH "/sys/class/powercap/intel-rapl:0:1/max_energy_range_uj"
+#define RAPL_PSYS_MAX_PATH   "/sys/class/powercap/intel-rapl:1/max_energy_range_uj"
 #define FREQ_CPU0_PATH   "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"
 #define TEMP_PKG_PATH    "/sys/class/thermal/thermal_zone0/temp"
 
@@ -63,7 +66,74 @@ typedef struct {
     uint64_t checksum;
 } measurement_t;
 
-static uint64_t g_rapl_max_uj = 262143328850ULL;
+/* Per-domain max_energy_range_uj (each domain's counter mask; wrap modulus = max+1).
+ * Index: 0=pkg, 1=core, 2=uncore, 3=psys. Discovered at runtime, never assumed. */
+static uint64_t g_rapl_max_uj[4] = {0, 0, 0, 0};
+
+/* Discovered host topology (never hard-coded) */
+static char g_host_model[256] = "unknown";
+static int g_host_logical_cpus = 0;
+static int g_host_physical_cores = 0;
+
+/* Read the first "model name" from /proc/cpuinfo and count logical CPUs
+ * ("processor" entries) plus distinct (physical id, core id) pairs. */
+static void discover_host_topology(void) {
+    FILE *fp = fopen("/proc/cpuinfo", "r");
+    if (!fp) {
+        snprintf(g_host_model, sizeof(g_host_model), "unknown (/proc/cpuinfo unavailable)");
+        g_host_logical_cpus = (int)sysconf(_SC_NPROCESSORS_ONLN);
+        g_host_physical_cores = g_host_logical_cpus;
+        return;
+    }
+    char line[512];
+    int n_proc = 0;
+    int model_seen = 0;
+    long seen_phys[64][2]; /* (physical id, core id) pairs */
+    int n_pairs = 0;
+    long cur_phys = -1, cur_core = -1;
+    int have_phys = 0, have_core = 0;
+    while (fgets(line, sizeof(line), fp)) {
+        if (strncmp(line, "model name", 10) == 0) {
+            char *c = strchr(line, ':');
+            if (c && !model_seen) {
+                model_seen = 1;
+                c++;
+                while (*c == ' ' || *c == '\t') c++;
+                size_t l = strlen(c);
+                while (l > 0 && (c[l-1] == '\n' || c[l-1] == '\r')) c[--l] = '\0';
+                snprintf(g_host_model, sizeof(g_host_model), "%s", c);
+            }
+        } else if (strncmp(line, "processor", 9) == 0) {
+            n_proc++;
+            /* a new processor block starts: close the previous (phys,core) pair */
+            if (have_phys && have_core && n_pairs < 64) {
+                seen_phys[n_pairs][0] = cur_phys; seen_phys[n_pairs][1] = cur_core; n_pairs++;
+            }
+            have_phys = have_core = 0;
+        } else if (strncmp(line, "physical id", 11) == 0) {
+            char *c = strchr(line, ':');
+            if (c) { cur_phys = strtol(c + 1, NULL, 10); have_phys = 1; }
+        } else if (strncmp(line, "core id", 7) == 0) {
+            char *c = strchr(line, ':');
+            if (c) { cur_core = strtol(c + 1, NULL, 10); have_core = 1; }
+        }
+    }
+    if (have_phys && have_core && n_pairs < 64) {
+        seen_phys[n_pairs][0] = cur_phys; seen_phys[n_pairs][1] = cur_core; n_pairs++;
+    }
+    fclose(fp);
+    if (n_proc <= 0) n_proc = (int)sysconf(_SC_NPROCESSORS_ONLN);
+    g_host_logical_cpus = n_proc;
+    /* distinct (physical id, core id) pairs = physical cores */
+    int distinct = 0;
+    for (int i = 0; i < n_pairs; ++i) {
+        int dup = 0;
+        for (int j = 0; j < i; ++j)
+            if (seen_phys[j][0] == seen_phys[i][0] && seen_phys[j][1] == seen_phys[i][1]) { dup = 1; break; }
+        if (!dup) distinct++;
+    }
+    g_host_physical_cores = (distinct > 0) ? distinct : n_proc;
+}
 
 static int read_u64_file(const char *path, uint64_t *out) {
     FILE *fp = fopen(path, "r");
@@ -99,9 +169,11 @@ static void sleep_until_ns(uint64_t target_ns) {
     }
 }
 
-static uint64_t rapl_diff(uint64_t after, uint64_t before) {
+/* Wrap-corrected diff for domain idx: max_energy_range_uj is the counter
+ * bitmask, so the modulus is g_rapl_max_uj[idx] + 1 (per domain, not package). */
+static uint64_t rapl_diff(uint64_t after, uint64_t before, int idx) {
     if (after >= before) return after - before;
-    return (g_rapl_max_uj - before) + after;
+    return (g_rapl_max_uj[idx] + 1ULL - before) + after;
 }
 
 static int take_sample(sample_t *s) {
@@ -117,10 +189,10 @@ static int take_sample(sample_t *s) {
 
 static measurement_t diff_samples(const sample_t *a, const sample_t *b, uint64_t checksum) {
     measurement_t m;
-    m.pkg_uj = rapl_diff(b->pkg_uj, a->pkg_uj);
-    m.core_uj = rapl_diff(b->core_uj, a->core_uj);
-    m.uncore_uj = rapl_diff(b->uncore_uj, a->uncore_uj);
-    m.psys_uj = rapl_diff(b->psys_uj, a->psys_uj);
+    m.pkg_uj = rapl_diff(b->pkg_uj, a->pkg_uj, 0);
+    m.core_uj = rapl_diff(b->core_uj, a->core_uj, 1);
+    m.uncore_uj = rapl_diff(b->uncore_uj, a->uncore_uj, 2);
+    m.psys_uj = rapl_diff(b->psys_uj, a->psys_uj, 3);
     m.wall_us = (b->wall_ns - a->wall_ns) / 1000ULL;
     m.freq_khz_start = a->freq_khz;
     m.freq_khz_end = b->freq_khz;
@@ -155,6 +227,7 @@ static uint64_t run_one_block(uint64_t block_id, uint64_t *tile) {
 
 typedef struct {
     int      cpu_id;
+    int      pin_ok;   /* actual result of pthread_setaffinity_np */
     uint64_t block_start;
     uint64_t block_count;
     uint64_t slices;
@@ -169,7 +242,7 @@ static void *worker_fn(void *argp) {
     cpu_set_t set;
     CPU_ZERO(&set);
     CPU_SET(a->cpu_id, &set);
-    (void)pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+    a->pin_ok = (pthread_setaffinity_np(pthread_self(), sizeof(set), &set) == 0);
 
     uint64_t *tile = NULL;
     if (posix_memalign((void **)&tile, 64, (size_t)TILE_WORDS * sizeof(uint64_t)) != 0 || !tile) {
@@ -214,6 +287,12 @@ static int run_parallel_job(
     if (total_blocks % (uint64_t)n_threads != 0) return -1;
     uint64_t per_thr = total_blocks / (uint64_t)n_threads;
     if (slices > 1 && (per_thr % slices != 0)) return -1;
+    /* Fail closed: every requested cpu_id must exist on this host. */
+    if (g_host_logical_cpus > 0 && n_threads > g_host_logical_cpus) {
+        fprintf(stderr, "ERROR: %d threads requested but host has only %d logical CPUs\n",
+                n_threads, g_host_logical_cpus);
+        return -1;
+    }
 
     pthread_t th[16];
     worker_arg_t args[16];
@@ -222,7 +301,8 @@ static int run_parallel_job(
 
     uint64_t win_dur_ns = win_dur_ms * 1000000ULL;
     for (int i = 0; i < n_threads; ++i) {
-        args[i].cpu_id = i; /* CPUs 0..7 are physical cores; 8..15 are SMT siblings */
+        args[i].cpu_id = i; /* pinned to logical CPU i (actual result recorded in pin_ok) */
+        args[i].pin_ok = 0;
         args[i].block_start = (uint64_t)i * per_thr;
         args[i].block_count = per_thr;
         args[i].slices = slices;
@@ -231,26 +311,57 @@ static int run_parallel_job(
         args[i].barrier = &barrier;
     }
 
+    int created = 0;
     for (int i = 0; i < n_threads; ++i) {
         if (pthread_create(&th[i], NULL, worker_fn, &args[i]) != 0) {
+            /* Release the barrier for the already-created workers, then clean up. */
+            for (int j = i; j < n_threads; ++j) {
+                args[j].block_count = 0;
+                args[j].win_dur_ns = 0;
+            }
+            for (int j = i; j <= n_threads; ++j) pthread_barrier_wait(&barrier);
+            for (int j = 0; j < i; ++j) pthread_join(th[j], NULL);
+            pthread_barrier_destroy(&barrier);
+            fprintf(stderr, "ERROR: pthread_create failed at thread %d\n", i);
             return -1;
         }
+        created++;
     }
 
     sample_t s0, s1;
-    if (take_sample(&s0) != 0) return -1;
+    if (take_sample(&s0) != 0) {
+        /* stop workers, join, clean up before failing */
+        for (int i = 0; i < n_threads; ++i) { args[i].block_count = 0; args[i].win_dur_ns = 0; }
+        for (int j = created; j <= n_threads; ++j) pthread_barrier_wait(&barrier);
+        for (int i = 0; i < created; ++i) pthread_join(th[i], NULL);
+        pthread_barrier_destroy(&barrier);
+        return -1;
+    }
     uint64_t start_ns = monotonic_ns();
     for (int i = 0; i < n_threads; ++i) {
         args[i].win_start_ns = start_ns;
     }
     pthread_barrier_wait(&barrier);
 
+    /* Fail closed when any required pinning failed. */
+    for (int i = 0; i < n_threads; ++i) {
+        if (!args[i].pin_ok) {
+            fprintf(stderr, "ERROR: pinning worker %d to CPU %d failed\n", i, args[i].cpu_id);
+            for (int j = 0; j < n_threads; ++j) pthread_join(th[j], NULL);
+            pthread_barrier_destroy(&barrier);
+            return -1;
+        }
+    }
+
     uint64_t total_sum = 0;
     for (int i = 0; i < n_threads; ++i) {
         pthread_join(th[i], NULL);
         total_sum += args[i].out_sum;
     }
-    if (take_sample(&s1) != 0) return -1;
+    if (take_sample(&s1) != 0) {
+        pthread_barrier_destroy(&barrier);
+        return -1;
+    }
     pthread_barrier_destroy(&barrier);
 
     *out_m = diff_samples(&s0, &s1, total_sum);
@@ -279,7 +390,21 @@ static void print_meas_json(const measurement_t *m) {
 
 int main(int argc, char **argv) {
     int calibrate_only = (argc >= 2 && strcmp(argv[1], "--calibrate") == 0);
-    (void)read_u64_file(RAPL_MAX_PATH, &g_rapl_max_uj);
+    discover_host_topology();
+    /* Per-domain RAPL max_energy_range_uj (counter mask; modulus = max+1).
+     * Fail closed if any domain's max is unreadable or degenerate. */
+    {
+        static const char *max_paths[4] = {
+            RAPL_PKG_MAX_PATH, RAPL_CORE_MAX_PATH, RAPL_UNCORE_MAX_PATH, RAPL_PSYS_MAX_PATH
+        };
+        for (int i = 0; i < 4; ++i) {
+            if (read_u64_file(max_paths[i], &g_rapl_max_uj[i]) != 0
+                || g_rapl_max_uj[i] == 0ULL || g_rapl_max_uj[i] == UINT64_MAX) {
+                fprintf(stderr, "ERROR: cannot read per-domain RAPL max_energy_range_uj (%s)\n", max_paths[i]);
+                return 2;
+            }
+        }
+    }
 
     if (calibrate_only) {
         measurement_t m;
@@ -372,8 +497,12 @@ int main(int argc, char **argv) {
     printf("{\n");
     printf("  \"schema\": \"aletheia.track_s65_live_silicon_probe.v1\",\n");
     printf("  \"measured_live_silicon\": true,\n");
-    printf("  \"host_cpu_model\": \"Intel Core i9-11900H (8 physical cores 0..7 + 8 SMT siblings 8..15)\",\n");
-    printf("  \"rapl_max_energy_range_uj\": %" PRIu64 ",\n", g_rapl_max_uj);
+    printf("  \"host_cpu_model\": \"%s\",\n", g_host_model);
+    printf("  \"host_logical_cpus\": %d,\n", g_host_logical_cpus);
+    printf("  \"host_physical_cores\": %d,\n", g_host_physical_cores);
+    printf("  \"worker_pin_policy\": \"each worker pinned to logical CPU i via pthread_setaffinity_np; jobs fail closed if any pin fails or i >= host_logical_cpus\",\n");
+    printf("  \"rapl_max_energy_range_uj_per_domain\": [%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "],\n",
+           g_rapl_max_uj[0], g_rapl_max_uj[1], g_rapl_max_uj[2], g_rapl_max_uj[3]);
     printf("  \"tile_words_u64\": %d,\n", TILE_WORDS);
     printf("  \"inner_rounds\": %d,\n", INNER_ROUNDS);
     printf("  \"ops_per_block\": %" PRIu64 ",\n", OPS_PER_BLOCK);
@@ -400,7 +529,8 @@ int main(int argc, char **argv) {
     for (int k = 0; k < 7; ++k) {
         int p = p_list[k];
         printf("    {\"threads\":%d,\"physical_cores_used\":%d,\"smt_siblings_used\":%d,\"trials\":[",
-               p, (p <= 8 ? p : 8), (p > 8 ? p - 8 : 0));
+               p, (p <= g_host_physical_cores ? p : g_host_physical_cores),
+               (p > g_host_physical_cores ? p - g_host_physical_cores : 0));
         print_meas_json(&b_res[0][k]);
         printf(",");
         print_meas_json(&b_res[1][k]);

@@ -1141,6 +1141,9 @@ size_t e8had_gemv_materialized_avx2(
     size_t cols,
     float *y_out
 ) {
+    /* Fail closed on unaligned widths: the hot loops load 32 floats per block
+     * (cols >> 5 blocks), so cols must be a positive multiple of 32. */
+    if (!g_e8_ready || cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     size_t bad = 0;
     const size_t nb = (size_t)g_e8.bytes;
     const size_t rec_sz = nb + 1u;
@@ -1176,6 +1179,8 @@ size_t e8had_gemv_adjoint_avx2(
     size_t cols,
     float *y_out
 ) {
+    /* Fail closed on unaligned widths (see materialized variant). */
+    if (!g_e8_ready || cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     float *x_tilde = (float *)malloc(cols * sizeof(float));
     if (!x_tilde) return rows;
     wht8_f32_vector(x, x_tilde, cols);
@@ -1213,6 +1218,8 @@ size_t e8had_gemv_adjoint_batch4_avx2(
     size_t cols,
     float *y_out
 ) {
+    /* Fail closed on unaligned widths (see materialized variant). */
+    if (!g_e8_ready || cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     float *x_tilde = (float *)malloc(cols * sizeof(float));
     if (!x_tilde) return rows;
     wht8_f32_vector(x, x_tilde, cols);
@@ -1283,25 +1290,28 @@ size_t q4km_style_gemv_avx2(
     size_t cols,
     float *y_out
 ) {
+    /* Fail closed on unaligned widths: 32 floats are loaded per 32-weight block. */
+    if (cols == 0u || (cols & 31u) != 0u) return rows + 1u;
     const size_t blk_per_row = cols >> 5;
     const size_t rec_sz = 18u;
 #if HAS_AVX2
     const __m128i mask_lo = _mm_set1_epi8(0x0f);
-    const __m128i eight = _mm_set1_epi8(8);
     for (size_t r = 0; r < rows; ++r) {
         const uint8_t *row_ptr = records + r * blk_per_row * rec_sz;
         __m256 row_acc = _mm256_setzero_ps();
         for (size_t b = 0; b < blk_per_row; ++b) {
             const uint8_t *rec = row_ptr + b * rec_sz;
             __m256 v_sc = _mm256_set1_ps(scale_lut[rec[0]]);
+            /* Decode the encoded zero point rec[1] instead of assuming 8. */
+            __m256 v_zp = _mm256_set1_ps((float)rec[1]);
             __m128i packed = _mm_loadu_si128((const __m128i *)(rec + 2u));
-            __m128i lo_n = _mm_sub_epi8(_mm_and_si128(packed, mask_lo), eight);
-            __m128i hi_n = _mm_sub_epi8(_mm_and_si128(_mm_srli_epi16(packed, 4), mask_lo), eight);
+            __m128i lo_n = _mm_and_si128(packed, mask_lo);
+            __m128i hi_n = _mm_and_si128(_mm_srli_epi16(packed, 4), mask_lo);
             const float *xp = x + (b << 5);
-            __m256 f0 = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(lo_n));
-            __m256 f1 = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(_mm_srli_si128(lo_n, 8)));
-            __m256 f2 = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(hi_n));
-            __m256 f3 = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(_mm_srli_si128(hi_n, 8)));
+            __m256 f0 = _mm256_sub_ps(_mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(lo_n)), v_zp);
+            __m256 f1 = _mm256_sub_ps(_mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_srli_si128(lo_n, 8))), v_zp);
+            __m256 f2 = _mm256_sub_ps(_mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(hi_n)), v_zp);
+            __m256 f3 = _mm256_sub_ps(_mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_srli_si128(hi_n, 8))), v_zp);
             __m256 blk_acc = _mm256_mul_ps(f0, _mm256_loadu_ps(xp + 0));
             blk_acc = _mm256_fmadd_ps(f1, _mm256_loadu_ps(xp + 8), blk_acc);
             blk_acc = _mm256_fmadd_ps(f2, _mm256_loadu_ps(xp + 16), blk_acc);
@@ -1317,11 +1327,12 @@ size_t q4km_style_gemv_avx2(
         for (size_t b = 0; b < blk_per_row; ++b) {
             const uint8_t *rec = row_ptr + b * rec_sz;
             float s = scale_lut[rec[0]];
+            float zp = (float)rec[1]; /* encoded zero point, not hard-coded 8 */
             const float *xp = x + (b << 5);
             float bacc = 0.0f;
             for (int i = 0; i < 16; ++i) {
-                int q0 = (int)(rec[2 + i] & 0x0fu) - 8;
-                int q1 = (int)(rec[2 + i] >> 4) - 8;
+                int q0 = (int)(rec[2 + i] & 0x0fu) - (int)zp;
+                int q1 = (int)(rec[2 + i] >> 4) - (int)zp;
                 bacc += (float)q0 * xp[i] + (float)q1 * xp[16 + i];
             }
             acc += s * bacc;
