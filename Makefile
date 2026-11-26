@@ -3,14 +3,21 @@ NVCC     ?= /opt/cuda/bin/nvcc
 ARCH     ?= sm_86
 BUILD    := build
 
-AVX512_FLAGS := -O3 -march=native -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni
+AVX512_FLAGS := -O3 -march=native -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma
+AVX2_FLAGS   := -O3 -mavx2 -mfma -Wall -Wextra -Werror -std=c11
+RAPL_FLAGS   := -O3 -Wall -Wextra -Werror
 CUDA_FLAGS   := -O3 -std=c++17 -arch=$(ARCH) --ptxas-options=-v
 
 CPU_BINS := \
 	$(BUILD)/libqwen25_avx512_a16_engine.so \
 	$(BUILD)/aletheion_avx512_a16_decoder \
 	$(BUILD)/s71_proximity_bench \
-	$(BUILD)/hf_reference_avx512_a16_blockh4
+	$(BUILD)/hf_reference_avx512_a16_blockh4 \
+	$(BUILD)/libe8had_simd.so \
+	$(BUILD)/libe8_stage1.so \
+	$(BUILD)/rapl_landauer_microkernels \
+	$(BUILD)/granular_silicon_microprobe \
+	$(BUILD)/two_way_silicon_probe
 
 CUDA_BINS := \
 	$(BUILD)/libqwen25_sm86_a16_engine.so \
@@ -20,6 +27,8 @@ CUDA_BINS := \
 	$(BUILD)/rtx3080_live_llm_transcode_kernels \
 	$(BUILD)/rtx3080_qwen3b_kernels \
 	$(BUILD)/hf_reference_sm86_a16_blockh4 \
+	$(BUILD)/rtx3080_siliquant_a16_kernels \
+	$(BUILD)/rtx3080_qwen15b_kernels \
 	$(BUILD)/libsu2_holonomy_scan_sm86.so
 
 .PHONY: all cpu cuda clean check-zero-spill
@@ -49,6 +58,25 @@ $(BUILD)/s71_proximity_bench: cpu/avx512/s71_proximity_bench.c | $(BUILD)
 $(BUILD)/hf_reference_avx512_a16_blockh4: cpu/avx512/hf_reference_avx512_a16_blockh4.c | $(BUILD)
 	$(CC) -O3 -march=native $< -lm -o $@
 
+# --- Intel AVX2 / FMA Zero-Division E_8 Lattice Targets ---
+
+$(BUILD)/libe8had_simd.so: cpu/avx2/e8had_simd_bench.c | $(BUILD)
+	$(CC) $(AVX2_FLAGS) -shared -fPIC -pthread $< -lm -o $@
+
+$(BUILD)/libe8_stage1.so: cpu/avx2/e8_stage1_bench.c | $(BUILD)
+	$(CC) $(AVX2_FLAGS) -shared -fPIC -pthread $< -lm -o $@
+
+# --- Linux intel-rapl / Landauer / RDTSC Silicon Microprobes ---
+
+$(BUILD)/rapl_landauer_microkernels: cpu/rapl/rapl_landauer_microkernels.c | $(BUILD)
+	$(CC) $(RAPL_FLAGS) -mavx512f -mavx512bw -mavx512vl -mavx512vnni -mfma -pthread $< -lm -o $@
+
+$(BUILD)/granular_silicon_microprobe: cpu/rapl/granular_silicon_microprobe.c | $(BUILD)
+	$(CC) $(RAPL_FLAGS) -pthread $< -lm -o $@
+
+$(BUILD)/two_way_silicon_probe: cpu/rapl/two_way_silicon_probe.c | $(BUILD)
+	$(CC) $(RAPL_FLAGS) -pthread $< -lm -o $@
+
 # --- NVIDIA Ampere sm_86 Bare-Metal PTX/SASS Targets ---
 
 $(BUILD)/libqwen25_sm86_a16_engine.so: cuda/sm86/qwen25_sm86_a16_engine.cu | $(BUILD)
@@ -72,8 +100,25 @@ $(BUILD)/rtx3080_qwen3b_kernels: cuda/sm86/rtx3080_qwen3b_kernels.cu | $(BUILD)
 $(BUILD)/hf_reference_sm86_a16_blockh4: cuda/sm86/hf_reference_sm86_a16_blockh4.cu | $(BUILD)
 	$(NVCC) $(CUDA_FLAGS) $< -o $@
 
+$(BUILD)/rtx3080_siliquant_a16_kernels: cuda/sm86/rtx3080_siliquant_a16_kernels.cu | $(BUILD)
+	$(NVCC) $(CUDA_FLAGS) $< -o $@
+
+$(BUILD)/rtx3080_qwen15b_kernels: cuda/sm86/rtx3080_qwen15b_kernels.cu | $(BUILD)
+	$(NVCC) $(CUDA_FLAGS) $< -o $@
+
 $(BUILD)/libsu2_holonomy_scan_sm86.so: cuda/sm86/su2_holonomy_scan_sm86.cu | $(BUILD)
 	$(NVCC) $(CUDA_FLAGS) --shared -Xcompiler -fPIC $< -o $@
+
+check-zero-spill:
+	@rm -rf ./build && mkdir -p ./build
+	@LOG=./build/ptxas_spill.log && \
+	$(MAKE) cuda >"$$LOG" 2>&1 || { cat "$$LOG"; exit 1; }; \
+	if grep -E '([1-9][0-9]* bytes stack frame|[1-9][0-9]* bytes spill stores|[1-9][0-9]* bytes spill loads)' "$$LOG"; then \
+		echo "ERROR: non-zero register/stack spill detected" >&2; \
+		exit 1; \
+	fi; \
+	echo "ZERO_SPILL_VERIFIED=1 ($$(grep -c '0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads' "$$LOG") kernel instantiations)"; \
+	rm -f "$$LOG"
 
 clean:
 	rm -rf ./build
