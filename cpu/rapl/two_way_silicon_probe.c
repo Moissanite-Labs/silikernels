@@ -288,7 +288,10 @@ int main(int argc, char **argv) {
             return 2;
         }
         fprintf(stderr, "CALIBRATE 1T 240 blocks: wall_us=%" PRIu64 " pkg_uj=%" PRIu64 "\n", m.wall_us, m.pkg_uj);
-        if (run_parallel_job(4, 960, 1, 0, &m) != 0) return 2;
+        if (run_parallel_job(4, 960, 1, 0, &m) != 0) {
+            fprintf(stderr, "ERROR: measurement failed (RAPL/hwmon data unavailable)\n");
+            return 2;
+        }
         fprintf(stderr, "CALIBRATE 4T 960 blocks: wall_us=%" PRIu64 " pkg_uj=%" PRIu64 "\n", m.wall_us, m.pkg_uj);
         return 0;
     }
@@ -299,7 +302,10 @@ int main(int argc, char **argv) {
      * - Exp B (1T) takes ~1500 ms (and 8T ~200 ms), with W_B_BLOCKS a multiple of 480
      *   (divides cleanly by every p in {1, 2, 4, 6, 8, 12, 16}). */
     measurement_t warm;
-    if (run_parallel_job(4, 160, 1, 0, &warm) != 0) return 2;
+    if (run_parallel_job(4, 160, 1, 0, &warm) != 0) {
+        fprintf(stderr, "ERROR: measurement failed (RAPL/hwmon data unavailable)\n");
+        return 2;
+    }
     uint64_t t4_160_us = (warm.wall_us > 0) ? warm.wall_us : 1000ULL;
     /* Target ~500,000 us on 4T for W_A_BLOCKS, rounded to multiple of 800 in [800, 16000]
      * so per_thr = W_A_BLOCKS / 4 is a multiple of 200 (divides cleanly by 1, 4, 40, 100). */
@@ -316,8 +322,10 @@ int main(int argc, char **argv) {
     usleep(300000);
 
     measurement_t idle_pre, idle_post;
-    if (run_idle_window(1500ULL, &idle_pre) != 0) return 2;
-
+    if (run_idle_window(1500ULL, &idle_pre) != 0) {
+        fprintf(stderr, "ERROR: measurement failed (RAPL/hwmon data unavailable)\n");
+        return 2;
+    }
     /* Experiment A: 2 interleaved trials of (race_free, burst_1, burst_4, paced_40, paced_100) */
     const char *a_names[5] = {
         "race_to_sleep_free",
@@ -356,8 +364,10 @@ int main(int argc, char **argv) {
     }
 
     usleep(300000);
-    if (run_idle_window(1500ULL, &idle_post) != 0) return 2;
-
+    if (run_idle_window(1500ULL, &idle_post) != 0) {
+        fprintf(stderr, "ERROR: measurement failed (RAPL/hwmon data unavailable)\n");
+        return 2;
+    }
     /* Emit strict pure-integer JSON to stdout */
     printf("{\n");
     printf("  \"schema\": \"aletheia.track_s65_live_silicon_probe.v1\",\n");

@@ -25,7 +25,7 @@ jobs:
           gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma -fopenmp -shared -fPIC cpu/avx512/qwen25_avx512_a16_engine.c -lm -o build/libqwen25_avx512_a16_engine.so
           gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma -fopenmp cpu/avx512/aletheion_avx512_a16_decoder.c -lm -o build/aletheion_avx512_a16_decoder
           gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma -pthread cpu/avx512/s71_proximity_bench.c -lm -o build/s71_proximity_bench
-          gcc -O3 cpu/avx512/hf_reference_avx512_a16_blockh4.c -lm -o build/hf_reference_avx512_a16_blockh4
+          gcc -O3 -march=native cpu/avx512/hf_reference_avx512_a16_blockh4.c -lm -o build/hf_reference_avx512_a16_blockh4
           gcc -O3 -mavx2 -mfma -Wall -Wextra -Werror -std=c11 -shared -fPIC -pthread cpu/avx2/e8had_simd_bench.c -lm -o build/libe8had_simd.so
           gcc -O3 -mavx2 -mfma -Wall -Wextra -Werror -std=c11 -shared -fPIC -pthread cpu/avx2/e8_stage1_bench.c -lm -o build/libe8_stage1.so
           gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vnni -mfma -Wall -Wextra -Werror -pthread cpu/rapl/rapl_landauer_microkernels.c -lm -o build/rapl_landauer_microkernels
