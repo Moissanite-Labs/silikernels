@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Verify Monarch-2 + Byte-Bias FWHT Head Receipts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-monarch2-fwht-head:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Pure-stdlib 3-mode isolated -I receipt & tamper-refusal verification
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          for flags in "-I -B" "-I -O -B" "-I -B -W error"; do
+            python3 $flags verify/verify_monarch2_fwht_head.py --check --require-verdict CONFIRMED --json
+            python3 $flags verify/test_monarch2_fwht_head_r5.py
+          done
+
+      - name: Fail-closed hygiene, leak, telemetry, bare-assert, & internal-tag check
+        run: |
+          set -eu
+          ALL_FILES=(
+            cuda/sm86/holosphere_monarch2_fwht_head_sm86.cu
+            cuda/sm86/holosphere_monarch2_fwht_head_bench.cu
+            cuda/sm86/holosphere_monarch2_fwht_head.mk
+            cuda/sm86/monarch2_fwht_head_bpb_study.py
+            cuda/sm86/README_MONARCH2_FWHT_HEAD.md
+            receipts/monarch2_fwht_head_ptxas_receipt.json
+            receipts/monarch2_fwht_head_results.json
+            verify/verify_monarch2_fwht_head.py
+            verify/test_monarch2_fwht_head_r5.py
+          )
+          NON_GUARD_FILES=(
+            cuda/sm86/holosphere_monarch2_fwht_head_sm86.cu
+            cuda/sm86/holosphere_monarch2_fwht_head_bench.cu
+            cuda/sm86/holosphere_monarch2_fwht_head.mk
+            cuda/sm86/monarch2_fwht_head_bpb_study.py
+            cuda/sm86/README_MONARCH2_FWHT_HEAD.md
+            receipts/monarch2_fwht_head_ptxas_receipt.json
+            receipts/monarch2_fwht_head_results.json
+          )
+          for f in "${ALL_FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: expected file missing: $f" >&2
+              exit 1
+            fi
+          done
+
+          rc=0
+          grep -rnEi '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}|\b(Track[[:space:]]+S[0-9]+|EXP-Q[0-9]+|CS-[0-9]+|AUDIT-[A-Z0-9-]+|H19[a-d]?|PREREG-[A-Z0-9-]+|W1[0-9]-OBS|s156b?)\b' "${ALL_FILES[@]}" || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            echo "ERROR: leak, internal tag, or grep error detected (rc=$rc)" >&2
+            exit 1
+          fi
+
+          rc=0
+          grep -rnEi '(RAPL|NVML|nvidia-smi|\b(mJ|uJ|J)[[:space:]]*/[[:space:]]*tok|\btok(en)?s?[[:space:]]*/[[:space:]]*(m|u|k)?J\b|\b(watts?|joules?|kWh|MWh|TDP|mAh)\b)' "${NON_GUARD_FILES[@]}" || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            echo "ERROR: forbidden power/energy telemetry claim or grep error detected (rc=$rc)" >&2
+            exit 1
+          fi
+
+          python3 -I -B -c '
+          import ast, pathlib, sys
+          for p in ("cuda/sm86/monarch2_fwht_head_bpb_study.py", "verify/verify_monarch2_fwht_head.py", "verify/test_monarch2_fwht_head_r5.py"):
+              for n in ast.walk(ast.parse(pathlib.Path(p).read_text(encoding="utf-8"))):
+                  if isinstance(n, ast.Assert):
+                      sys.exit(f"ERROR: bare assert in {p}:{n.lineno}")
+          print("MONARCH2_HEAD_HYGIENE_PASS=1")
+          '

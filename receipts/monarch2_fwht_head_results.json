@@ -1,0 +1,281 @@
+{
+  "bpb_summary": {
+    "arm5_lift_over_2b_bias_q": "83117402676579603292110127/124466254939608251687830800",
+    "arm5_lift_over_ref2b_q": "12306533849032369913510757/11673370816423499310963550",
+    "arm5_lt_8a_all_seeds": true,
+    "arm5_minus_arm8a_q": "-25634492944391368487093621/123408915427766749201788900",
+    "arm7_lift_over_2b_bias_q": "15889338220018050847201569889/22997822947173185909963096880",
+    "arm7_lift_over_ref2b_q": "41827596934687944337606725793/38824322918169099431332323540",
+    "arm7_lt_2b_bias_all_seeds": true,
+    "arm7_lt_8a_all_seeds": true,
+    "arm7_minus_arm8a_q": "-789542377511683554486775453/3420368502877582413173077581",
+    "arm9_lift_over_2b_bias_q": "26003719830402293904998768119/19664350821297383574258092880",
+    "arm9_lift_over_ref2b_q": "6303077278967788119594781287/3688538055758566507008374060",
+    "arm9_lt_2b_bias_all_seeds": true,
+    "arm9_lt_8a_all_seeds": true,
+    "arm9_minus_arm8a_q": "-840634030703390301046949023/974865118511399175116577177",
+    "best_gap_closed_fraction_q": "180551279087702192967471693765303799329/194917223122264608259266884821571558389",
+    "best_lift_over_ref2b_q": "6303077278967788119594781287/3688538055758566507008374060",
+    "best_minus_arm4_dense_q": "6370996992614169526983611/46857103191427028356227987",
+    "best_structured_arm": "arm9_monarch2_bias_16p5KiB",
+    "bias_only_lift_over_ref2b_q": "63376283943805212838179971/163996379364447328470686640",
+    "dense_gap_ref2b_minus_arm4_q": "1310736527061918270979739/710505416234814494083020"
+  },
+  "energy_power_status": "UNCONTROLLED_LAPTOP_NOT_CLAIMED",
+  "gates": {
+    "G1_bpb_bias_and_lowrank_beat": true,
+    "G2_sm86_zero_spill_latency_parity": true
+  },
+  "hardware": {
+    "device": "NVIDIA GeForce RTX 3080 Laptop GPU",
+    "nvcc_version": "Cuda compilation tools, release 13.4, V13.4.92",
+    "sm": "8.6"
+  },
+  "result_sha256": "28a96067221f8150f1183cffad352ecd4f266605b04b80ae2a7fefb898d1b926",
+  "schema": "silikernels.sm86.monarch2_fwht_head_results.v1",
+  "silicon_sm86_bench": {
+    "arm2b_bias_fp64_max_err_q": "1413652289/10000000000000000",
+    "arm2b_bias_us_per_tok_q": "10091/8000",
+    "arm5_bias_fp64_max_err_q": "1342700777/10000000000000000",
+    "arm5_bias_us_per_tok_q": "1803563/1000000",
+    "arm7_bias_fp64_max_err_q": "291305967/2000000000000000",
+    "arm7_bias_us_per_tok_q": "547797/250000",
+    "arm9_monarch2_bias_fp64_max_err_q": "84537251/500000000000000",
+    "arm9_monarch2_bias_us_per_tok_q": "1335093/500000"
+  },
+  "source_bindings": {
+    "bench_cu_path": "cuda/sm86/holosphere_monarch2_fwht_head_bench.cu",
+    "bench_cu_sha256": "80a0bcdc0f43106282cff33ce77af9feb84470d93805277100c40645ec0c8d8e",
+    "bpb_study_script_path": "cuda/sm86/monarch2_fwht_head_bpb_study.py",
+    "bpb_study_script_sha256": "1d1d662099a0cc48229c21d6d532c7fbfe62a28b96ff1e508cda20cb3e921341",
+    "corpus_eval_bin_sha256": "31fd132d888a21ecebe9e907b6c4b82e3e68e42b5a29e2839584447dcca631a0",
+    "corpus_id": "holosphere-v3-flagship-corpus",
+    "corpus_sha256": "a05e415f7d33ef32376ff3d9da1eede0e3f561b64094b5b91147b2696a99e9d4",
+    "corpus_train_bin_sha256": "528c6c792d2a563d82d21ce213b26209441b39fa5e76b8595607bab2ca853b7b",
+    "kernel_cu_path": "cuda/sm86/holosphere_monarch2_fwht_head_sm86.cu",
+    "kernel_cu_sha256": "eb8a6e5a7ca5f4e5974b27a094a296b894ffc4718084a1d62bb9766a0a10ebc6",
+    "ptxas_receipt_path": "receipts/monarch2_fwht_head_ptxas_receipt.json",
+    "ptxas_receipt_sha256": "238e1ef75883d60c3d4edf06cbc91b7c1ab9fea389b16ce8224b7b2738891bd0"
+  },
+  "unbiased_scalar_ref_bpb_q": "399633111796751/74411611509180",
+  "utf8_bpb_study": {
+    "arms": {
+      "arm2b_bias_514B": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 514,
+        "head_params": 257,
+        "mean_eval_bpb_q": "659073355380809/132234506984880",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "15904/3193",
+            "eval_bpb_q": "227007/45680",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "1661369/145856240",
+            "seed": 42,
+            "train_wall_s_q": "3152/235"
+          },
+          {
+            "eval_bpb_bf16_q": "292541/58552",
+            "eval_bpb_q": "204677/40966",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "6549/1199320616",
+            "seed": 137,
+            "train_wall_s_q": "5633/440"
+          },
+          {
+            "eval_bpb_bf16_q": "4313/863",
+            "eval_bpb_q": "234914/47109",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "450335/40655067",
+            "seed": 2026,
+            "train_wall_s_q": "3263/255"
+          }
+        ],
+        "total_params": 9115905
+      },
+      "arm4_dense_bias_262KiB": {
+        "hbm_vocab_table_bytes": 262658,
+        "head_fp16_bytes": 262658,
+        "head_params": 131329,
+        "mean_eval_bpb_q": "1110953392130/315094355037",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "305581/86716",
+            "eval_bpb_q": "194757/55267",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "2885/4792533172",
+            "seed": 42,
+            "train_wall_s_q": "1889/145"
+          },
+          {
+            "eval_bpb_bf16_q": "340523/96952",
+            "eval_bpb_q": "202269/57589",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "5041/5583368728",
+            "seed": 137,
+            "train_wall_s_q": "4036/313"
+          },
+          {
+            "eval_bpb_bf16_q": "323882/91463",
+            "eval_bpb_q": "818/231",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "8/21127953",
+            "seed": 2026,
+            "train_wall_s_q": "8177/648"
+          }
+        ],
+        "total_params": 9246977
+      },
+      "arm5_bias_2p5KiB": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 2560,
+        "head_params": 1280,
+        "mean_eval_bpb_q": "243766028938031/56475238322100",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "427155/99278",
+            "eval_bpb_q": "161494/37535",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "461593/3726399730",
+            "seed": 42,
+            "train_wall_s_q": "13307/998"
+          },
+          {
+            "eval_bpb_bf16_q": "417277/97011",
+            "eval_bpb_q": "350479/81484",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "1080799/7904844324",
+            "seed": 137,
+            "train_wall_s_q": "11101/843"
+          },
+          {
+            "eval_bpb_bf16_q": "222247/51146",
+            "eval_bpb_q": "133727/30775",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "50283/1574018150",
+            "seed": 2026,
+            "train_wall_s_q": "9469/726"
+          }
+        ],
+        "total_params": 9116928
+      },
+      "arm7_bias_8p5KiB": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 8704,
+        "head_params": 4352,
+        "mean_eval_bpb_q": "6719972438777561/1565252604966609",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "104271/24277",
+            "eval_bpb_q": "325115/75699",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "393574/1837744623",
+            "seed": 42,
+            "train_wall_s_q": "12410/979"
+          },
+          {
+            "eval_bpb_bf16_q": "400608/93571",
+            "eval_bpb_q": "297652/69523",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "125308/6505336633",
+            "seed": 137,
+            "train_wall_s_q": "11870/943"
+          },
+          {
+            "eval_bpb_bf16_q": "410205/95324",
+            "eval_bpb_q": "426642/99139",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "1908513/9450326036",
+            "seed": 2026,
+            "train_wall_s_q": "9184/733"
+          }
+        ],
+        "total_params": 9120000
+      },
+      "arm8a_lowrank16_bias_16p9KiB": {
+        "hbm_vocab_table_bytes": 16896,
+        "head_fp16_bytes": 16896,
+        "head_params": 8448,
+        "mean_eval_bpb_q": "29657706064534/6555558812727",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "239905/54317",
+            "eval_bpb_q": "143341/32451",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "23998/60780723",
+            "seed": 42,
+            "train_wall_s_q": "7202/571"
+          },
+          {
+            "eval_bpb_bf16_q": "290849/64127",
+            "eval_bpb_q": "400861/88383",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "93820/5667736641",
+            "seed": 137,
+            "train_wall_s_q": "8909/693"
+          },
+          {
+            "eval_bpb_bf16_q": "298492/64605",
+            "eval_bpb_q": "31676/6857",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "331664/442996485",
+            "seed": 2026,
+            "train_wall_s_q": "2633/202"
+          }
+        ],
+        "total_params": 9124096
+      },
+      "arm9_monarch2_bias_16p5KiB": {
+        "hbm_vocab_table_bytes": 0,
+        "head_fp16_bytes": 16896,
+        "head_params": 8448,
+        "mean_eval_bpb_q": "1633594833473479/446124493591053",
+        "seeds": [
+          {
+            "eval_bpb_bf16_q": "279522/76543",
+            "eval_bpb_q": "270949/74201",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "1562615/5679567143",
+            "seed": 42,
+            "train_wall_s_q": "12629/993"
+          },
+          {
+            "eval_bpb_bf16_q": "196659/53738",
+            "eval_bpb_q": "170192/46507",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "242417/2499193166",
+            "seed": 137,
+            "train_wall_s_q": "7797/622"
+          },
+          {
+            "eval_bpb_bf16_q": "288935/78636",
+            "eval_bpb_q": "158332/43093",
+            "eval_tokens": 32768,
+            "fp16_quant_bpb_diff_q": "480803/3388661148",
+            "seed": 2026,
+            "train_wall_s_q": "11260/859"
+          }
+        ],
+        "total_params": 9124096
+      }
+    },
+    "batch_size": 8,
+    "d_ff": 800,
+    "d_model": 512,
+    "eval_bytes": 32768,
+    "eval_chunks": 64,
+    "h256_ortho_fp64_max_err_q": "0/1",
+    "n_heads": 16,
+    "n_layers": 4,
+    "scope_note": "Controlled 6-arm x 3-seed iso-budget UTF-8 byte-LM evaluation executed via cuda/sm86/monarch2_fwht_head_bpb_study.py on external holosphere-v3-flagship-corpus (manifest, train.bin, and eval.bin SHA-256 digests bound in source_bindings; raw corpus binary is not checked into this kernel repo). Plain H_256 uses orthonormal 1/16 (0.0625) scale while bent4 FWHT_256 uses 1/sqrt(32) (sqrt(8) * orthonormal, sum y^2 = 8 * sum u^2) consistently across CUDA kernels, FP64 bench, and PyTorch study script. All 6 arms evaluate exact FP16 head weights alongside BF16 references (fp16_quant_bpb_diff_q = abs(fp16 - bf16)). Hardware ptxas/SASS counts (nvcc 13.4.92), FP32-vs-FP64 parity on FP16-rounded weights, and uncontrolled RTX 3080 Laptop (GA104M) latency figures are self-attested in this receipt.",
+    "seeds": [
+      42,
+      137,
+      2026
+    ],
+    "seq_len": 512,
+    "steps_per_seed": 300,
+    "tokens_per_seed": 1228800
+  },
+  "verdict": "CONFIRMED"
+}
