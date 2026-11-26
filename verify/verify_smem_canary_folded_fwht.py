@@ -33,11 +33,17 @@ from collections.abc import Mapping, Sequence as AbcSequence, Set as AbcSet
 from fractions import Fraction
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import unicodedata
+
+MAX_FILE_BYTES = 16 * 1024 * 1024
+MAX_Q_DIGITS = 1024
+MAX_JSON_DEPTH = 64
 
 SCHEMA_PTXAS = "silikernels.sm86.smem_canary_folded_fwht_ptxas_receipt.v1"
 SCHEMA_RESULTS = "silikernels.sm86.smem_canary_folded_fwht_results.v1"
@@ -50,8 +56,13 @@ EXPECTED_COMPILE_FLAGS = (
 
 KERNEL_CU_REL = "cuda/sm86/holosphere_smem_canary_folded_fwht_sm86.cu"
 BENCH_CU_REL = "cuda/sm86/holosphere_smem_canary_folded_fwht_bench.cu"
+BPB_STUDY_SCRIPT_REL = "cuda/sm86/run_smem_canary_folded_fwht_bpb_study.py"
 PTXAS_RECEIPT_REL = "receipts/smem_canary_folded_fwht_ptxas_receipt.json"
 RESULTS_RECEIPT_REL = "receipts/smem_canary_folded_fwht_results.json"
+CORPUS_EXTERNAL_STATUS = "EXTERNAL_OPEN_LICENSE_BINARIES_HASH_PINNED"
+EXPECTED_CORPUS_MANIFEST_SHA256 = "280ff5af8bdac00b5db5d9b0dea7e57c05e4c854b576387ddf18c5d1042b7691"
+EXPECTED_TRAIN_BIN_SHA256 = "528c6c792d2a563d82d21ce213b26209441b39fa5e76b8595607bab2ca853b7b"
+EXPECTED_EVAL_BIN_SHA256 = "31fd132d888a21ecebe9e907b6c4b82e3e68e42b5a29e2839584447dcca631a0"
 
 FOLDED_CELL_SYMBOL = (
     "_ZN22holosphere_smem_canary41holosphere_cell_folded1k_smem_canary_sm86E"
@@ -100,8 +111,12 @@ _RESULTS_KEYS: frozenset[str] = frozenset(
 _HARDWARE_KEYS: frozenset[str] = frozenset({"device", "sm", "host_native_atomic_supported", "nvcc_version"})
 _SOURCE_BINDINGS_KEYS: frozenset[str] = frozenset(
     {
-        "kernel_cu_path", "kernel_cu_sha256", "bench_cu_path", "bench_cu_sha256",
+        "kernel_cu_path", "kernel_cu_sha256",
+        "bench_cu_path", "bench_cu_sha256",
+        "bpb_study_script_path", "bpb_study_script_sha256",
         "ptxas_receipt_path", "ptxas_receipt_sha256",
+        "corpus_manifest_sha256", "corpus_train_bin_sha256", "corpus_eval_bin_sha256",
+        "corpus_external_binary_status",
     }
 )
 _SILICON_KEYS: frozenset[str] = frozenset(
@@ -160,13 +175,19 @@ _ALNUM_TOKEN_RE = re.compile(r"[a-z0-9]+")
 _CAMEL_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 _FORBIDDEN_AST_FROM_MODULES: frozenset[str] = frozenset(
-    {"math", "cmath", "decimal", "statistics", "numpy", "scipy", "torch", "operator", "importlib", "builtins", "ctypes"}
+    {
+        "math", "cmath", "decimal", "statistics", "numpy", "scipy", "torch",
+        "operator", "importlib", "builtins", "ctypes", "struct", "array",
+        "random", "time", "numbers",
+    }
 )
 _FORBIDDEN_AST_IMPORT_MODULES: frozenset[str] = _FORBIDDEN_AST_FROM_MODULES | frozenset({"fractions"})
+_FORBIDDEN_AST_IMPORT_NAMES: frozenset[str] = frozenset({"modules", "literal_eval", "load", "loads"})
 _FORBIDDEN_AST_NAMES: frozenset[str] = frozenset(
     {
         "float", "complex", "pow", "__import__", "eval", "exec", "compile",
         "getattr", "setattr", "globals", "locals", "vars", "builtins", "__builtins__",
+        "format", "format_map", "divmod", "round", "memoryview", "literal_eval", "load",
     }
 )
 _FORBIDDEN_AST_ATTRS: frozenset[str] = (_FORBIDDEN_AST_NAMES - frozenset({"compile"})) | frozenset(
@@ -175,7 +196,10 @@ _FORBIDDEN_AST_ATTRS: frozenset[str] = (_FORBIDDEN_AST_NAMES - frozenset({"compi
         "__truediv__", "__rtruediv__", "__itruediv__",
         "__floordiv__", "__rfloordiv__", "__float__", "__complex__",
         "__pow__", "__rpow__", "__ipow__",
+        "__getattribute__", "__getattr__", "__class__", "__bases__",
+        "__reduce__", "__reduce_ex__",
         "modules", "__dict__", "__subclasses__", "__globals__", "__loader__", "__spec__",
+        "real", "imag", "hex", "fromhex", "as_integer_ratio", "cast",
     }
 )
 
@@ -184,32 +208,39 @@ _FORBIDDEN_ENERGY_KEYS: frozenset[str] = frozenset(
         "w", "pw", "nw", "uw", "mw", "kw", "gw", "tw",
         "wh", "whr", "whrs", "mwh", "kwh",
         "j", "pj", "nj", "uj", "mj", "kj", "gj", "tj",
-        "tdp", "pwr", "watt", "watts", "joule", "joules",
+        "tdp", "pwr", "watt", "watts", "wattage", "joule", "joules",
         "millijoule", "millijoules", "energy", "power", "edp",
         "rapl", "nvml", "nvidiasmi", "mah",
     }
 )
 _FORBIDDEN_COMPACT_KEY_RE = re.compile(
     r"(?:(?:tera|giga|mega|kilo|milli|micro|nano|pico)?(?:watt|joule)"
-    r"|power|energy|mjpertok|mjtok|jpertok|ujpertok|kwh|mwh|whpertok|tdp|rapl|nvml|nvidiasmi)"
+    r"|(?<!em)power(?!ed|ing|ment)|energy|mjpertok|mjtok|jpertok|ujpertok|kwh|mwh|whpertok|tdp|rapl|nvml|nvidiasmi)"
 )
 _ENERGY_PFX = r"(?:p|n|u|\u03bc|m|k|g|t|pico|nano|micro|milli|kilo|mega|giga|tera)"
-_ENERGY_UNIT = r"(?:watt[^a-z0-9]*hours?|watthours?|watts?|joules?|whrs?|wh|w|j|tdp)"
-_ENERGY_SEP = r"[^a-z0-9]*"
-_ENERGY_NUM = r"\d[\d.,]*(?:e[+-]?\d+)?"
+_ENERGY_UNIT = r"(?:watt[^a-z0-9]{0,2}hours?|watthours?|wattage|watts?|joules?|whrs?|wh|w|j|tdp)"
+_ENERGY_LABEL_UNIT = r"(?:watt[^a-z0-9]{0,2}hours?|watthours?|wattage|watts?|joules?|whrs?|wh|w|tdp|energy|power)"
+_ENERGY_SEP = r"[^a-z0-9]{0,6}"
+_ENERGY_NUM = r"(?<![0-9.,])\d+(?:[.,]\d+)*(?:e[+-]?\d+)?"
 _FORBIDDEN_ENERGY_VALUE_RE = re.compile(
     "(?:"
-    rf"{_ENERGY_NUM}{_ENERGY_SEP}(?:{_ENERGY_PFX}{_ENERGY_SEP})?{_ENERGY_UNIT}(?![a-z0-9])(?!/\s)"
-    rf"|(?<![a-z0-9])(?:{_ENERGY_PFX}{_ENERGY_SEP})?{_ENERGY_UNIT}\s*(?:[:=]\s*|\s+){_ENERGY_NUM}(?![a-z0-9])"
-    rf"|(?<![a-z0-9])tdp[^a-z0-9]*{_ENERGY_NUM}"
-    rf"|^[^a-z0-9]*(?:{_ENERGY_PFX}{_ENERGY_SEP})?{_ENERGY_UNIT}[^a-z0-9]*$"
-    r"|(?:^|[^a-z0-9])(?:(?:p|n|u|\u03bc|m|k|g|t)?(?:joules?|watts?|j|wh)|kwh|mwh|energy|power)[\s_-]*(?:per|/)[\s_-]*tok(?:en)?s?(?:$|[^a-z0-9])"
-    r"|(?:^|[^a-z0-9])tok(?:en)?s?[\s_-]*(?:per|/)[\s_-]*(?:(?:p|n|u|\u03bc|m|k|g|t)?(?:j|joules?|watts?)|wh|kwh|mwh)(?:$|[^a-z0-9])"
-    r"|(?:^|[^a-z0-9])per[\s_-]+(?:(?:p|n|u|\u03bc|m|k|g|t)?(?:watts?|joules?)|w|j)(?:$|[^a-z0-9])"
-    r"|(?:rapl|nvml|nvidia[\s_-]*smi|(?:^|[^a-z0-9])mah(?:$|[^a-z0-9]))"
-    r"|(?:^|[^a-z0-9])(?:less|lower|reduced|fewer)[\s_-]+(?:in[\s_-]+)?(?:energy|power)(?:$|[^a-z0-9])"
-    r"|(?:^|[^a-z0-9])(?:energy|power)[\s_-]+(?:use|usage|reduction|savings?|dropped|consumption)(?:$|[^a-z0-9])"
-    r"|(?:%|percent)[\s_-]+(?:of[\s_-]+)?(?:(?:stock|baseline|nominal|peak|idle|full|total|gpu|cpu)[\s_-]+)?(?:energy|power)(?:$|[^a-z0-9])"
+    rf"{_ENERGY_NUM}{_ENERGY_SEP}(?:{_ENERGY_PFX}{_ENERGY_SEP})?{_ENERGY_UNIT}(?![a-z0-9])(?!/\s|/[a-z])"
+    rf"|{_ENERGY_NUM}{_ENERGY_SEP}(?:{_ENERGY_PFX}{_ENERGY_SEP})?(?:w|j|watts?|joules?)\s*/\s*tok(?:en)?s?(?![a-z0-9])"
+    rf"|{_ENERGY_NUM}\s*(?:m?a|amps?)(?![a-z0-9])[^a-z0-9]{{0,12}}(?:at|@|x|\*|by)\s*{_ENERGY_NUM}\s*(?:m?v|volts?)(?![a-z0-9])"
+    rf"|{_ENERGY_NUM}\s*(?:m?v|volts?)(?![a-z0-9])[^a-z0-9]{{0,12}}(?:at|@|x|\*|by)\s*{_ENERGY_NUM}\s*(?:m?a|amps?)(?![a-z0-9])"
+    rf"|(?<![a-z0-9])(?:{_ENERGY_PFX}{_ENERGY_SEP})?{_ENERGY_LABEL_UNIT}\s*(?:[:=]\s*|\s+){_ENERGY_NUM}(?![a-z0-9])"
+    rf"|(?<![a-z0-9])(?:{_ENERGY_PFX}{_ENERGY_SEP})?j\s*:\s*{_ENERGY_NUM}(?![a-z0-9])"
+    rf"|(?<![a-z0-9])tdp[^a-z0-9]{{0,4}}{_ENERGY_NUM}"
+    rf"|^[^a-z0-9]{{0,4}}(?:{_ENERGY_PFX}{_ENERGY_SEP})?{_ENERGY_UNIT}[^a-z0-9]{{0,4}}$"
+    rf"|(?<![a-z0-9])(?:{_ENERGY_PFX}[^a-z0-9]{{0,2}})?(?:wattage|watts?|joules?|watt[^a-z0-9]{{0,2}}hours?|watthours?)(?![a-z0-9])"
+    r"|(?:^|[^a-z0-9])(?:(?:p|n|u|\u03bc|m|k|g|t)?(?:joules?|watts?|j|wh)|(?:p|n|u|\u03bc|m|k|g|t)w|kwh|mwh|energy|power)[\s_-]{0,4}(?:per|/)[\s_-]{0,4}tok(?:en)?s?(?:$|[^a-z0-9])"
+    r"|(?:^|[^a-z0-9])w(?:/tok(?:en)?s?|[\s_-]{1,4}per[\s_-]{1,4}tok(?:en)?s?)(?:$|[^a-z0-9])"
+    r"|(?:^|[^a-z0-9])tok(?:en)?s?[\s_-]{0,4}(?:per|/)[\s_-]{0,4}(?:(?:p|n|u|\u03bc|m|k|g|t)?(?:j|joules?|watts?)|wh|kwh|mwh)(?:$|[^a-z0-9])"
+    r"|(?:^|[^a-z0-9])per[\s_-]{1,4}(?:(?:p|n|u|\u03bc|m|k|g|t)?(?:watts?|joules?)|w|j)(?:$|[^a-z0-9])"
+    r"|(?:rapl|nvml|nvidia[\s_-]{0,4}smi|(?:^|[^a-z0-9])mah(?:$|[^a-z0-9]))"
+    r"|(?:^|[^a-z0-9])(?:less|lower|reduced|fewer)[\s_-]{1,4}(?:in[\s_-]{1,4})?(?:energy|power)(?:$|[^a-z0-9])"
+    r"|(?:^|[^a-z0-9])(?:energy|power)[\s_-]{1,4}(?:use|usage|reduction|savings?|dropped|consumption)(?:$|[^a-z0-9])"
+    r"|(?:%|percent)[\s_-]{1,4}(?:of[\s_-]{1,4})?(?:(?:stock|baseline|nominal|peak|idle|full|total|gpu|cpu)[\s_-]{1,4})?(?:energy|power)(?:$|[^a-z0-9])"
     ")"
 )
 
@@ -263,62 +294,297 @@ def _reject_non_finite(token: str) -> Any:
     raise SmemCanaryVerifyError("NON_FINITE_JSON", f"non-finite constant: {token!r}")
 
 
-def load_strict_canonical_json(path: Path) -> Any:
-    require_ok(path.is_file(), "MISSING_FILE", path.name)
-    raw_bytes = path.read_bytes()
+def _reject_json_float(token: str) -> Any:
+    raise SmemCanaryVerifyError("JSON_FLOAT_FORBIDDEN", f"JSON float literal forbidden: {token!r}")
+
+
+def _parse_bounded_int(token: str) -> int:
+    digits = token[1:] if token.startswith("-") else token
+    require_ok(len(digits) <= MAX_Q_DIGITS, "READ_OR_PARSE_ERROR", "JSON integer exceeds digit limit")
+    return int(token)
+
+
+def _check_json_depth(obj: Any) -> None:
+    stack: List[Tuple[Any, int]] = [(obj, 0)]
+    while stack:
+        cur, depth = stack.pop()
+        require_ok(depth <= MAX_JSON_DEPTH, "READ_OR_PARSE_ERROR", f"JSON nesting exceeds {MAX_JSON_DEPTH}")
+        if type(cur) is dict:
+            for val in cur.values():
+                if type(val) is dict or type(val) is list:
+                    stack.append((val, depth + 1))
+        elif type(cur) is list:
+            for item in cur:
+                if type(item) is dict or type(item) is list:
+                    stack.append((item, depth + 1))
+
+
+def _read_fd_regular_bounded(fd: int, label: str) -> bytes:
     try:
-        text = raw_bytes.decode("ascii")
-        parsed = json.loads(text, object_pairs_hook=_no_dup_object_pairs, parse_constant=_reject_non_finite)
+        st = os.fstat(fd)
+        require_ok(stat.S_ISREG(st.st_mode), "NOT_REGULAR_FILE", f"not a regular file: {label}")
+        with os.fdopen(fd, "rb", closefd=False) as fh:
+            data = fh.read(MAX_FILE_BYTES + 1)
     except SmemCanaryVerifyError:
         raise
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except OSError as exc:
+        raise SmemCanaryVerifyError("READ_OR_PARSE_ERROR", f"I/O failure reading {label}") from exc
+    require_ok(len(data) <= MAX_FILE_BYTES, "FILE_TOO_LARGE", f"file exceeds {MAX_FILE_BYTES} B")
+    return data
+
+
+def _read_regular_bytes_nofollow(path: Path) -> bytes:
+    """Pre-open lstat + O_NOFOLLOW | O_NONBLOCK + S_ISREG + bounded byte cap."""
+    try:
+        lst = os.lstat(str(path))
+    except OSError as exc:
+        raise SmemCanaryVerifyError("MISSING_FILE", path.name) from exc
+    if stat.S_ISLNK(lst.st_mode):
+        raise SmemCanaryVerifyError("SYMLINK_FORBIDDEN", f"symlink forbidden: {path.name}")
+    require_ok(stat.S_ISREG(lst.st_mode), "NOT_REGULAR_FILE", f"not a regular file: {path.name}")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    try:
+        fd = os.open(str(path), flags)
+    except OSError as exc:
+        raise SmemCanaryVerifyError("MISSING_FILE", path.name) from exc
+    try:
+        return _read_fd_regular_bounded(fd, path.name)
+    finally:
+        os.close(fd)
+
+
+def _read_rel_bytes_under_root_nofollow(root: Path, rel_path: str) -> bytes:
+    """Walk root and every intermediate directory with O_DIRECTORY | O_NOFOLLOW before reading leaf."""
+    try:
+        rst = os.lstat(str(root))
+    except OSError as exc:
+        raise SmemCanaryVerifyError("MISSING_FILE", root.name) from exc
+    if stat.S_ISLNK(rst.st_mode):
+        raise SmemCanaryVerifyError("SYMLINK_FORBIDDEN", f"symlink root forbidden: {root.name}")
+    require_ok(stat.S_ISDIR(rst.st_mode), "NOT_REGULAR_FILE", f"root must be directory: {root.name}")
+
+    dir_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        cur_fd = os.open(str(root), dir_flags)
+    except OSError as exc:
+        raise SmemCanaryVerifyError("MISSING_FILE", root.name) from exc
+
+    parts = Path(rel_path).parts
+    try:
+        for seg in parts[:-1]:
+            try:
+                nxt_fd = os.open(seg, dir_flags, dir_fd=cur_fd)
+            except OSError as exc:
+                try:
+                    if stat.S_ISLNK(os.lstat(seg, dir_fd=cur_fd).st_mode):
+                        raise SmemCanaryVerifyError("SYMLINK_FORBIDDEN", f"symlink dir forbidden: {seg}") from exc
+                except OSError:
+                    pass
+                raise SmemCanaryVerifyError("MISSING_FILE", seg) from exc
+            os.close(cur_fd)
+            cur_fd = nxt_fd
+
+        leaf = parts[-1]
+        try:
+            lst = os.lstat(leaf, dir_fd=cur_fd)
+        except OSError as exc:
+            raise SmemCanaryVerifyError("MISSING_FILE", leaf) from exc
+        if stat.S_ISLNK(lst.st_mode):
+            raise SmemCanaryVerifyError("SYMLINK_FORBIDDEN", f"symlink forbidden: {leaf}")
+        require_ok(stat.S_ISREG(lst.st_mode), "NOT_REGULAR_FILE", f"not a regular file: {leaf}")
+
+        try:
+            leaf_fd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=cur_fd)
+        except OSError as exc:
+            raise SmemCanaryVerifyError("MISSING_FILE", leaf) from exc
+        try:
+            return _read_fd_regular_bounded(leaf_fd, leaf)
+        finally:
+            os.close(leaf_fd)
+    finally:
+        os.close(cur_fd)
+
+
+def _read_self_source_nofollow(self_path: Path) -> str:
+    """Read verifier source via O_NOFOLLOW + parent non-symlink check without .resolve()."""
+    try:
+        pst = os.lstat(str(self_path.parent))
+    except OSError as exc:
+        raise SmemCanaryVerifyError("MISSING_FILE", self_path.parent.name) from exc
+    if stat.S_ISLNK(pst.st_mode):
+        raise SmemCanaryVerifyError("SYMLINK_FORBIDDEN", f"symlink parent forbidden: {self_path.parent.name}")
+    raw = _read_regular_bytes_nofollow(self_path)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
         raise SmemCanaryVerifyError("READ_OR_PARSE_ERROR", str(exc)) from exc
-    expected_raw = (json.dumps(parsed, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
-    require_ok(raw_bytes == expected_raw, "RAW_JSON_NOT_CANONICAL", f"non-canonical bytes in {path.name}")
+
+
+def _parse_strict_canonical_json_bytes(raw_bytes: bytes, label: str) -> Any:
+    try:
+        text = raw_bytes.decode("ascii")
+        parsed = json.loads(
+            text,
+            object_pairs_hook=_no_dup_object_pairs,
+            parse_int=_parse_bounded_int,
+            parse_constant=_reject_non_finite,
+            parse_float=_reject_json_float,
+        )
+        _check_json_depth(parsed)
+        expected_raw = (json.dumps(parsed, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
+    except SmemCanaryVerifyError:
+        raise
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError) as exc:
+        raise SmemCanaryVerifyError("READ_OR_PARSE_ERROR", str(exc)) from exc
+    require_ok(raw_bytes == expected_raw, "RAW_JSON_NOT_CANONICAL", f"non-canonical bytes in {label}")
     return parsed
 
 
+def load_strict_canonical_json(path: Path) -> Any:
+    return _parse_strict_canonical_json_bytes(_read_regular_bytes_nofollow(path), path.name)
+
+
+def _is_safe_int_ast_expr(node: ast.AST) -> bool:
+    """Allow only integer-typed AST expressions inside Fraction(a, b) (rejecting bare Name/str/bytes/f-string)."""
+    stack: List[ast.AST] = [node]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, ast.Constant):
+            if type(cur.value) is not int:
+                return False
+        elif isinstance(cur, ast.UnaryOp) and isinstance(cur.op, ast.USub):
+            stack.append(cur.operand)
+        elif isinstance(cur, ast.BinOp) and isinstance(cur.op, (ast.Add, ast.Sub, ast.Mult)):
+            stack.append(cur.left)
+            stack.append(cur.right)
+        elif isinstance(cur, ast.Call) and isinstance(cur.func, ast.Name) and cur.func.id == "int":
+            continue
+        elif isinstance(cur, ast.Attribute) and cur.attr in ("numerator", "denominator"):
+            continue
+        elif isinstance(cur, ast.Subscript):
+            continue
+        else:
+            return False
+    return True
+
+
 def verify_pure_q_ast(source_text: str) -> None:
-    """Enforce zero-float, zero-ast.Div, zero-ast.Pow, zero-assert, and zero-escape discipline."""
+    """Enforce zero-float, zero-ast.Div, zero-ast.Mod, zero-ast.Pow, zero-assert, and zero-escape discipline."""
     try:
         tree = ast.parse(source_text)
-    except SyntaxError as exc:
+    except (SyntaxError, ValueError, RecursionError) as exc:
         raise SmemCanaryVerifyError("AST_SYNTAX_ERROR", str(exc)) from exc
+
+    allowed_fraction_nodes: set[int] = set()
+    allowed_loads_nodes: set[int] = set()
+    allowed_type_calls: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.arg) and node.annotation is not None:
+            allowed_fraction_nodes.update(id(sub) for sub in ast.walk(node.annotation))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.returns is not None:
+            allowed_fraction_nodes.update(id(sub) for sub in ast.walk(node.returns))
+        elif isinstance(node, ast.AnnAssign):
+            allowed_fraction_nodes.update(id(sub) for sub in ast.walk(node.annotation))
+        elif isinstance(node, ast.Compare):
+            if (
+                isinstance(node.left, ast.Call)
+                and isinstance(node.left.func, ast.Name)
+                and node.left.func.id == "type"
+                and all(isinstance(op, (ast.Is, ast.IsNot, ast.In, ast.NotIn)) for op in node.ops)
+            ):
+                allowed_type_calls.add(id(node.left))
+        elif isinstance(node, ast.Attribute):
+            if (
+                node.attr in ("__name__", "__mro__")
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "type"
+            ):
+                allowed_type_calls.add(id(node.value))
+        elif isinstance(node, ast.Call):
+            if (isinstance(node.func, ast.Name) and node.func.id == "Fraction") or (
+                isinstance(node.func, ast.Attribute) and node.func.attr == "Fraction"
+            ):
+                allowed_fraction_nodes.add(id(node.func))
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "loads":
+                allowed_loads_nodes.add(id(node.func))
+
     for node in ast.walk(tree):
         require_ok(not isinstance(node, ast.Div), "AST_DIV_FORBIDDEN", "ast.Div forbidden")
+        require_ok(not isinstance(node, ast.FloorDiv), "AST_FLOORDIV_FORBIDDEN", "ast.FloorDiv forbidden")
+        require_ok(not isinstance(node, ast.Mod), "AST_MOD_FORBIDDEN", "ast.Mod forbidden")
         require_ok(not isinstance(node, ast.Pow), "AST_POW_FORBIDDEN", "ast.Pow forbidden")
         require_ok(not isinstance(node, ast.Assert), "AST_BARE_ASSERT", "ast.Assert forbidden")
+        if isinstance(node, ast.FormattedValue):
+            require_ok(node.format_spec is None, "AST_FORMAT_SPEC_FORBIDDEN", "f-string format_spec forbidden")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            require_ok(node.name != "Fraction", "AST_FRACTION_SHADOW", "shadowing Fraction forbidden")
+        if isinstance(node, ast.arg):
+            require_ok(node.arg != "Fraction", "AST_FRACTION_SHADOW", "shadowing Fraction arg forbidden")
+        if isinstance(node, ast.ExceptHandler):
+            require_ok(node.name != "Fraction", "AST_FRACTION_SHADOW", "shadowing Fraction handler forbidden")
         if isinstance(node, ast.Constant):
             tname = type(node.value).__name__
             require_ok(tname not in ("float", "complex"), "AST_FLOAT_LITERAL", f"literal {tname}")
         if isinstance(node, ast.Import):
             for alias in node.names:
                 root_mod = alias.name.split(".", 1)[0]
-                require_ok(root_mod not in _FORBIDDEN_AST_IMPORT_MODULES, "AST_FORBIDDEN_IMPORT", alias.name)
+                require_ok(
+                    not root_mod.startswith("_") and root_mod not in _FORBIDDEN_AST_IMPORT_MODULES,
+                    "AST_FORBIDDEN_IMPORT",
+                    alias.name,
+                )
         if isinstance(node, ast.ImportFrom):
             require_ok(node.level == 0 and node.module is not None, "AST_RELATIVE_IMPORT", "relative import forbidden")
             mod = node.module.split(".", 1)[0]
-            require_ok(mod not in _FORBIDDEN_AST_FROM_MODULES, "AST_FORBIDDEN_IMPORT", node.module)
+            require_ok(
+                (mod == "__future__" or not mod.startswith("_")) and mod not in _FORBIDDEN_AST_FROM_MODULES,
+                "AST_FORBIDDEN_IMPORT",
+                node.module,
+            )
             for alias in node.names:
                 require_ok(alias.name != "*", "AST_WILDCARD_IMPORT", "wildcard import forbidden")
+                require_ok(alias.name not in _FORBIDDEN_AST_IMPORT_NAMES, "AST_FORBIDDEN_IMPORT", alias.name)
                 if node.module == "fractions":
                     require_ok(alias.name == "Fraction" and alias.asname is None, "AST_FRACTION_ALIAS", alias.name)
         if isinstance(node, ast.Name):
             require_ok(node.id not in _FORBIDDEN_AST_NAMES, "AST_FORBIDDEN_NAME", node.id)
+            if node.id == "Fraction":
+                require_ok(id(node) in allowed_fraction_nodes, "AST_FRACTION_REF", "Fraction alias or non-call ref forbidden")
+            if node.id == "loads":
+                require_ok(id(node) in allowed_loads_nodes, "AST_LOADS_REF", "bare loads ref forbidden")
         if isinstance(node, ast.Attribute):
             require_ok(node.attr not in _FORBIDDEN_AST_ATTRS, "AST_FORBIDDEN_ATTR", node.attr)
+            if node.attr == "Fraction":
+                require_ok(id(node) in allowed_fraction_nodes, "AST_FRACTION_REF", "Fraction attribute ref forbidden")
+            if node.attr == "loads":
+                require_ok(id(node) in allowed_loads_nodes, "AST_LOADS_REF", "loads attribute alias forbidden")
         if isinstance(node, ast.Call):
+            require_ok(
+                isinstance(node.func, (ast.Name, ast.Attribute)),
+                "AST_DYNAMIC_CALL",
+                "dynamic call expression forbidden",
+            )
+            if isinstance(node.func, ast.Name) and node.func.id == "type":
+                require_ok(id(node) in allowed_type_calls, "AST_TYPE_ESCAPE", "non-predicate type() call forbidden")
             if (isinstance(node.func, ast.Name) and node.func.id == "Fraction") or (
                 isinstance(node.func, ast.Attribute) and node.func.attr == "Fraction"
             ):
                 require_ok(len(node.args) == 2 and not node.keywords, "AST_FRACTION_ARGS", "Fraction requires 2 int args")
                 for arg in node.args:
-                    require_ok(
-                        not isinstance(arg, ast.JoinedStr)
-                        and not (isinstance(arg, ast.Constant) and type(arg.value) in (str, bytes)),
-                        "AST_FRACTION_STR",
-                        "Fraction(str) forbidden",
-                    )
+                    require_ok(_is_safe_int_ast_expr(arg), "AST_FRACTION_STR", "Fraction arg must be integer expr")
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "loads":
+                kw_map = {kw.arg: kw.value for kw in node.keywords if kw.arg is not None}
+                pf = kw_map.get("parse_float")
+                pc = kw_map.get("parse_constant")
+                require_ok(
+                    isinstance(pf, ast.Name)
+                    and pf.id not in ("None", "float")
+                    and isinstance(pc, ast.Name)
+                    and pc.id not in ("None", "float"),
+                    "AST_JSON_FLOAT_PARSE",
+                    "json.loads requires non-None parse_float and parse_constant guards",
+                )
 
 
 def canonical_json_bytes(obj: Any) -> bytes:
@@ -334,15 +600,7 @@ def canonical_sha256(obj: Any, *, exclude_key: Optional[str] = None) -> str:
 
 
 def sha256_file(path: Path) -> str:
-    require_ok(path.is_file(), "MISSING_FILE", path.name)
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        while True:
-            blk = fh.read(1 << 20)
-            if not blk:
-                break
-            h.update(blk)
-    return h.hexdigest()
+    return hashlib.sha256(_read_regular_bytes_nofollow(path)).hexdigest()
 
 
 def format_q(val: Fraction) -> str:
@@ -352,6 +610,7 @@ def format_q(val: Fraction) -> str:
 def parse_q(raw: Any, *, code: str = "BAD_RATIONAL") -> Fraction:
     require_ok(type(raw) is str and bool(_Q_STR_RE.match(raw)), code, f"invalid rational: {raw!r}")
     num_s, den_s = raw.split("/", 1)
+    require_ok(len(num_s) <= MAX_Q_DIGITS and len(den_s) <= MAX_Q_DIGITS, code, "rational exceeds digit limit")
     q = Fraction(int(num_s), int(den_s))
     require_ok(format_q(q) == raw, code, f"non-canonical rational: {raw!r}")
     return q
@@ -364,7 +623,7 @@ def q_div(a: Fraction, b: Fraction) -> Fraction:
 
 def q_div_int(q: Fraction, n: int) -> Fraction:
     require_ok(is_strict_int(n) and n > 0, "BAD_DIVISOR", f"n={n!r}")
-    return Fraction(q.numerator, q.denominator * n)
+    return Fraction(q.numerator, q.denominator * int(n))
 
 
 def contains_any_float(obj: Any) -> bool:
@@ -594,11 +853,27 @@ def fwht256_bent4_int(u256: Sequence[int]) -> List[int]:
     return buf
 
 
+def _mod_small(val: int, mod: int) -> int:
+    rem = val
+    while rem >= mod:
+        rem -= mod
+    return rem
+
+
 def verify_fwht256_fold_oracle(*, fwht_fn: Any = fwht256_bent4_int) -> Dict[str, Any]:
-    """Verify exact Parseval identity (sum y^2 == 256 * sum u^2) & upper-half gradient routing over Z."""
-    h512 = [((i * 17 + 5) % 13) - 6 for i in range(512)]
-    alpha = [((i * 3 + 1) % 5) + 1 for i in range(256)]
-    beta = [-(((i * 7 + 2) % 5) + 1) for i in range(256)]
+    """Verify exact known-answer delta->signed-Hadamard vectors, Parseval energy, & gradient routing over Z."""
+    for k in (0, 5, 37, 255):
+        delta = [0] * 256
+        delta[k] = 1
+        lane = k & 31
+        db = k ^ ((lane & 7) << 5)
+        b4 = ((lane & 3) & ((lane >> 2) & 3)).bit_count() & 1
+        expected = [-1 if (((tok & db).bit_count() ^ b4) & 1) else 1 for tok in range(256)]
+        require_ok(fwht_fn(delta) == expected, "ORACLE_FWHT_KAT", f"kat mismatch at k={k}")
+
+    h512 = [_mod_small(i * 17 + 5, 13) - 6 for i in range(512)]
+    alpha = [_mod_small(i * 3 + 1, 5) + 1 for i in range(256)]
+    beta = [-(_mod_small(i * 7 + 2, 5) + 1) for i in range(256)]
 
     u_fold = [alpha[i] * h512[i] + beta[i] * h512[256 + i] for i in range(256)]
     y_fold = fwht_fn(u_fold)
@@ -697,6 +972,7 @@ def verify_results_receipt(
     ptx: Dict[str, Any],
     *,
     expected_bench_cu_sha: Optional[str] = None,
+    expected_bpb_script_sha: Optional[str] = None,
 ) -> Dict[str, Any]:
     require_ok(type(res) is dict, "RESULTS_TYPE", "results must be dict")
     require_ok(res.get("schema") == SCHEMA_RESULTS, "RESULTS_SCHEMA", "bad results schema")
@@ -730,15 +1006,31 @@ def verify_results_receipt(
     require_ok(
         sb["kernel_cu_path"] == KERNEL_CU_REL
         and sb["bench_cu_path"] == BENCH_CU_REL
-        and sb["ptxas_receipt_path"] == PTXAS_RECEIPT_REL,
+        and sb["bpb_study_script_path"] == BPB_STUDY_SCRIPT_REL
+        and sb["ptxas_receipt_path"] == PTXAS_RECEIPT_REL
+        and sb["corpus_external_binary_status"] == CORPUS_EXTERNAL_STATUS,
         "RESULTS_BINDING_PATHS",
-        "unexpected source binding paths",
+        "unexpected source binding paths or corpus status",
     )
     require_ok(sb["kernel_cu_sha256"] == ptx["cu_sha256"], "RESULTS_CU_BIND", "kernel cu sha mismatch")
     require_ok(sb["ptxas_receipt_sha256"] == ptx["receipt_sha256"], "RESULTS_PTX_BIND", "ptxas sha mismatch")
     require_ok(is_hex64(sb["bench_cu_sha256"]), "RESULTS_BENCH_SHA", "bad bench_cu_sha256")
     if expected_bench_cu_sha is not None:
         require_ok(sb["bench_cu_sha256"] == expected_bench_cu_sha, "RESULTS_BENCH_DISK", "bench cu disk mismatch")
+    require_ok(is_hex64(sb["bpb_study_script_sha256"]), "RESULTS_BPB_SCRIPT_SHA", "bad bpb_study_script_sha256")
+    if expected_bpb_script_sha is not None:
+        require_ok(
+            sb["bpb_study_script_sha256"] == expected_bpb_script_sha,
+            "RESULTS_BPB_SCRIPT_DISK",
+            "bpb study script disk mismatch",
+        )
+    require_ok(
+        sb["corpus_manifest_sha256"] == EXPECTED_CORPUS_MANIFEST_SHA256
+        and sb["corpus_train_bin_sha256"] == EXPECTED_TRAIN_BIN_SHA256
+        and sb["corpus_eval_bin_sha256"] == EXPECTED_EVAL_BIN_SHA256,
+        "RESULTS_CORPUS_SHA",
+        "corpus sha256 does not match pinned open-license corpus digests",
+    )
 
     sil = res["silicon_parity_and_canary"]
     require_ok(type(sil) is dict and frozenset(sil.keys()) == _SILICON_KEYS, "RESULTS_SILICON", "bad silicon section")
@@ -922,20 +1214,48 @@ def verify_results_receipt(
     return res
 
 
-def verify_on_disk(repo_root: Path) -> Dict[str, Any]:
-    verify_pure_q_ast(Path(__file__).resolve().read_text(encoding="utf-8"))
-    kernel_cu = repo_root.joinpath(KERNEL_CU_REL)
-    bench_cu = repo_root.joinpath(BENCH_CU_REL)
-    ptx_path = repo_root.joinpath(PTXAS_RECEIPT_REL)
-    res_path = repo_root.joinpath(RESULTS_RECEIPT_REL)
+def _verify_bpb_study_corpus_pins(bpb_script_bytes: bytes) -> None:
+    """Verify the bound BPB study script defines the exact pinned corpus SHA-256 constants."""
+    try:
+        tree = ast.parse(bpb_script_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, SyntaxError, ValueError, RecursionError) as exc:
+        raise SmemCanaryVerifyError("READ_OR_PARSE_ERROR", str(exc)) from exc
+    found: Dict[str, str] = {}
+    targets = {
+        "EXPECTED_CORPUS_MANIFEST_SHA256": EXPECTED_CORPUS_MANIFEST_SHA256,
+        "EXPECTED_TRAIN_BIN_SHA256": EXPECTED_TRAIN_BIN_SHA256,
+        "EXPECTED_EVAL_BIN_SHA256": EXPECTED_EVAL_BIN_SHA256,
+    }
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            name = stmt.targets[0].id
+            if name in targets and isinstance(stmt.value, ast.Constant) and type(stmt.value.value) is str:
+                found[name] = stmt.value.value
+    require_ok(found == targets, "BPB_STUDY_CORPUS_PIN_MISMATCH", "BPB study corpus SHA-256 pins mismatch")
 
-    kernel_sha = sha256_file(kernel_cu)
-    bench_sha = sha256_file(bench_cu)
-    ptx = load_strict_canonical_json(ptx_path)
-    res = load_strict_canonical_json(res_path)
+
+def verify_on_disk(repo_root: Path) -> Dict[str, Any]:
+    verify_pure_q_ast(_read_self_source_nofollow(Path(__file__)))
+    kernel_bytes = _read_rel_bytes_under_root_nofollow(repo_root, KERNEL_CU_REL)
+    bench_bytes = _read_rel_bytes_under_root_nofollow(repo_root, BENCH_CU_REL)
+    bpb_script_bytes = _read_rel_bytes_under_root_nofollow(repo_root, BPB_STUDY_SCRIPT_REL)
+    ptx_bytes = _read_rel_bytes_under_root_nofollow(repo_root, PTXAS_RECEIPT_REL)
+    res_bytes = _read_rel_bytes_under_root_nofollow(repo_root, RESULTS_RECEIPT_REL)
+
+    _verify_bpb_study_corpus_pins(bpb_script_bytes)
+    kernel_sha = hashlib.sha256(kernel_bytes).hexdigest()
+    bench_sha = hashlib.sha256(bench_bytes).hexdigest()
+    bpb_script_sha = hashlib.sha256(bpb_script_bytes).hexdigest()
+    ptx = _parse_strict_canonical_json_bytes(ptx_bytes, Path(PTXAS_RECEIPT_REL).name)
+    res = _parse_strict_canonical_json_bytes(res_bytes, Path(RESULTS_RECEIPT_REL).name)
 
     verify_ptxas_receipt(ptx, expected_cu_sha=kernel_sha)
-    verify_results_receipt(res, ptx, expected_bench_cu_sha=bench_sha)
+    verify_results_receipt(
+        res,
+        ptx,
+        expected_bench_cu_sha=bench_sha,
+        expected_bpb_script_sha=bpb_script_sha,
+    )
     secded_oracle = verify_secded_and_smem_packer_oracle()
     fwht_oracle = verify_fwht256_fold_oracle()
 
@@ -947,8 +1267,9 @@ def verify_on_disk(repo_root: Path) -> Dict[str, Any]:
         "gates": res["gates"],
         "kernel_cu_sha256": kernel_sha,
         "bench_cu_sha256": bench_sha,
-        "ptxas_file_sha256": sha256_file(ptx_path),
-        "results_file_sha256": sha256_file(res_path),
+        "bpb_study_script_sha256": bpb_script_sha,
+        "ptxas_file_sha256": hashlib.sha256(ptx_bytes).hexdigest(),
+        "results_file_sha256": hashlib.sha256(res_bytes).hexdigest(),
         "ptxas_receipt_sha256": ptx["receipt_sha256"],
         "result_sha256": res["result_sha256"],
         "secded_oracle": secded_oracle,
@@ -966,7 +1287,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--require-verdict", type=str, default=None, help="Fail closed unless verdict matches this exact value")
     args = parser.parse_args(argv)
 
-    root = Path(args.repo_root) if args.repo_root is not None else Path(__file__).resolve().parent.parent
+    root = Path(args.repo_root) if args.repo_root is not None else Path(__file__).parent.parent
     try:
         summary = verify_on_disk(root)
         if args.require_verdict is not None:

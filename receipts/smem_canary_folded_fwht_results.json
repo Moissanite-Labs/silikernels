@@ -20,7 +20,7 @@
     "nvcc_version": "Cuda compilation tools, release 13.4, V13.4.92",
     "sm": "8.6"
   },
-  "result_sha256": "d02515363934dd4fba7ad3d79fd3eae0c328ae41089d4799ba43c7ff0f7593a1",
+  "result_sha256": "096ad4575b11107404e4a3ac27af6d8cbddf69e43349885cd527b25cff5220f9",
   "schema": "silikernels.sm86.smem_canary_folded_fwht_results.v1",
   "silicon_parity_and_canary": {
     "clean_packed_u32": 0,
@@ -114,6 +114,12 @@
   "source_bindings": {
     "bench_cu_path": "cuda/sm86/holosphere_smem_canary_folded_fwht_bench.cu",
     "bench_cu_sha256": "7a647bf7ffa7b61aa67ee2ca44288c184ca31ef0c70735fd35adfd753b89b67f",
+    "bpb_study_script_path": "cuda/sm86/run_smem_canary_folded_fwht_bpb_study.py",
+    "bpb_study_script_sha256": "2f31cba742b52a0af6741e569da5b8b3109b7ec753e3e19d10153ea00c4b50f2",
+    "corpus_eval_bin_sha256": "31fd132d888a21ecebe9e907b6c4b82e3e68e42b5a29e2839584447dcca631a0",
+    "corpus_external_binary_status": "EXTERNAL_OPEN_LICENSE_BINARIES_HASH_PINNED",
+    "corpus_manifest_sha256": "280ff5af8bdac00b5db5d9b0dea7e57c05e4c854b576387ddf18c5d1042b7691",
+    "corpus_train_bin_sha256": "528c6c792d2a563d82d21ce213b26209441b39fa5e76b8595607bab2ca853b7b",
     "kernel_cu_path": "cuda/sm86/holosphere_smem_canary_folded_fwht_sm86.cu",
     "kernel_cu_sha256": "80f983ef9cf71f78a4735cf60c30662eabce3ef77da9c2f4b94824cf9aa6fc23",
     "ptxas_receipt_path": "receipts/smem_canary_folded_fwht_ptxas_receipt.json",
@@ -303,7 +309,7 @@
     "eval_chunks": 64,
     "n_heads": 16,
     "n_layers": 4,
-    "scope_note": "Controlled 5-arm x 3-seed iso-budget UTF-8 byte-LM evaluation (external UTF-8 corpus binary not checked into this kernel repo). Gate G2 tests arm3 < arm1 and arm3 < arm2 on all 3 seeds plus standalone head overhead <= 0.5 us/tok; arm2b (1 scalar) is an un-gated attribution control showing a -0.0042 BPB tie across 2/3 seeds. Only arm3 applies an explicit FP16 head-weight round-trip vs BF16 (fp16_quant_bpb_diff_q > 0); the other arms evaluate identical BF16 head weights (fp16_quant_bpb_diff_q = 0/1).",
+    "scope_note": "5-arm x 3-seed iso-budget UTF-8 byte-LM evaluation bound to cuda/sm86/run_smem_canary_folded_fwht_bpb_study.py and external open-license corpus binaries pinned by SHA-256 in source_bindings. Gate G2 tests arm3 < arm1 and arm3 < arm2 on all 3 seeds plus uncontrolled RTX 3080 Laptop (GA104M) standalone head overhead <= 0.5 us/tok; arm2b (1 scalar) is an un-gated attribution control showing a -0.0042 BPB tie across 2/3 seeds. Only arm3 applies an explicit FP16 head-weight round-trip vs BF16 (fp16_quant_bpb_diff_q <= 2.51e-5); the other arms evaluate unmodified BF16 head weights (fp16_quant_bpb_diff_q = 0/1).",
     "seeds": [
       42,
       137,

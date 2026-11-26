@@ -11,17 +11,24 @@ import copy
 from fractions import Fraction
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 VERIFY_DIR = Path(__file__).resolve().parent
 REPO_ROOT = VERIFY_DIR.parent
 if str(VERIFY_DIR) not in sys.path:
     sys.path.insert(0, str(VERIFY_DIR))
 
-import verify_smem_canary_folded_fwht as vh
+try:
+    import verify_smem_canary_folded_fwht as vh
+except SystemExit as exc:
+    raise RuntimeError(f"verify_smem_canary_folded_fwht exited on import: {exc.code}") from exc
 
 
 def _resign(doc: dict, key: str) -> dict:
@@ -39,20 +46,35 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
     def test_01_hardened_pure_q_ast_audit_and_negatives(self) -> None:
         src = VERIFY_DIR.joinpath("verify_smem_canary_folded_fwht.py").read_text(encoding="utf-8")
         vh.verify_pure_q_ast(src)
-        vh.verify_pure_q_ast("from fractions import Fraction\nx = Fraction(1, 2)\n")
+        vh.verify_pure_q_ast("from fractions import Fraction\nx = Fraction(-1, 2)\ny = Fraction(1 + 2, 3)\n")
 
         for code, bad_code in (
             ("AST_SYNTAX_ERROR", "def (\n"),
             ("AST_DIV_FORBIDDEN", "x = 1 / 2\n"),
             ("AST_DIV_FORBIDDEN", "x /= 2\n"),
+            ("AST_FLOORDIV_FORBIDDEN", "x = 1 // 2\n"),
+            ("AST_MOD_FORBIDDEN", "x = '%.2f' % Fraction(1, 3)\n"),
+            ("AST_MOD_FORBIDDEN", "x = 5 % 2\n"),
             ("AST_POW_FORBIDDEN", "x = 2 ** -1\n"),
             ("AST_BARE_ASSERT", "assert True\n"),
+            ("AST_FORMAT_SPEC_FORBIDDEN", "x = f'{1:.3f}'\n"),
             ("AST_FLOAT_LITERAL", "x = 1.5\n"),
             ("AST_FLOAT_LITERAL", "x = 1j\n"),
+            ("AST_FRACTION_SHADOW", "def Fraction(): pass\n"),
+            ("AST_FRACTION_SHADOW", "class Fraction: pass\n"),
+            ("AST_FRACTION_SHADOW", "def f(Fraction): pass\n"),
+            ("AST_FRACTION_SHADOW", "try:\n pass\nexcept Exception as Fraction:\n pass\n"),
             ("AST_FORBIDDEN_IMPORT", "import math\n"),
             ("AST_FORBIDDEN_IMPORT", "import decimal\n"),
+            ("AST_FORBIDDEN_IMPORT", "import _decimal\n"),
+            ("AST_FORBIDDEN_IMPORT", "import random\n"),
             ("AST_FORBIDDEN_IMPORT", "import fractions\n"),
+            ("AST_FORBIDDEN_IMPORT", "import struct\n"),
+            ("AST_FORBIDDEN_IMPORT", "import array\n"),
             ("AST_FORBIDDEN_IMPORT", "from math import sqrt\n"),
+            ("AST_FORBIDDEN_IMPORT", "from _operator import truediv\n"),
+            ("AST_FORBIDDEN_IMPORT", "from sys import modules\n"),
+            ("AST_FORBIDDEN_IMPORT", "from json import loads\n"),
             ("AST_FORBIDDEN_IMPORT", "from importlib import import_module\n"),
             ("AST_RELATIVE_IMPORT", "from . import helper\n"),
             ("AST_RELATIVE_IMPORT", "from .foo import bar\n"),
@@ -62,17 +84,36 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             ("AST_FORBIDDEN_NAME", "x = float(1)\n"),
             ("AST_FORBIDDEN_NAME", "x = pow(2, -1)\n"),
             ("AST_FORBIDDEN_NAME", "x = __import__('math')\n"),
-            ("AST_FORBIDDEN_NAME", "k = 'float'\nx = getattr(__builtins__, k)(1)\n"),
+            ("AST_FORBIDDEN_NAME", "k = 'float'\nfn = getattr(__builtins__, k)\n"),
+            ("AST_FORBIDDEN_NAME", "x = format(1, '.2f')\n"),
+            ("AST_FORBIDDEN_NAME", "x = divmod(5, 2)\n"),
+            ("AST_FORBIDDEN_NAME", "x = round(1)\n"),
             ("AST_FORBIDDEN_ATTR", "x = Fraction.from_float(1)\n"),
             ("AST_FORBIDDEN_ATTR", "x = (1).__truediv__(2)\n"),
+            ("AST_FORBIDDEN_ATTR", "fn = (1).__getattribute__('__truediv__')\n"),
             ("AST_FORBIDDEN_ATTR", "import sys\nm = sys.modules['math']\n"),
             ("AST_FORBIDDEN_ATTR", "x = b.float(1)\n"),
+            ("AST_FORBIDDEN_ATTR", "x = json.load(f)\n"),
+            ("AST_FORBIDDEN_ATTR", "x = s.format(1)\n"),
+            ("AST_FRACTION_REF", "from fractions import Fraction\nQ = Fraction\nx = Q('1/2')\n"),
+            ("AST_FRACTION_REF", "from fractions import Fraction\nxs = [Fraction]\n"),
+            ("AST_FRACTION_REF", "x = mod.Fraction\n"),
+            ("AST_LOADS_REF", "import json\nf = json.loads\n"),
+            ("AST_LOADS_REF", "x = loads('1.5')\n"),
+            ("AST_DYNAMIC_CALL", "from fractions import Fraction\nx = type(Fraction(1, 1))('1.5')\n"),
+            ("AST_TYPE_ESCAPE", "from fractions import Fraction\nt = type(Fraction(1, 1))\n"),
+            ("AST_JSON_FLOAT_PARSE", "import json\nx = json.loads('1.5')\n"),
+            ("AST_JSON_FLOAT_PARSE", "import json\nx = json.loads('1.5', parse_float=None, parse_constant=c)\n"),
+            ("AST_JSON_FLOAT_PARSE", "import json\nx = json.loads('1.5', parse_float=f, parse_constant=None)\n"),
+            ("AST_JSON_FLOAT_PARSE", "import json\nx = json.loads('1.5', parse_float=float, parse_constant=c)\n"),
             ("AST_FRACTION_ARGS", "x = Fraction(1)\n"),
             ("AST_FRACTION_ARGS", "x = Fraction(1, 2, k=3)\n"),
             ("AST_FRACTION_ARGS", "x = mod.Fraction('1.5')\n"),
             ("AST_FRACTION_STR", "x = Fraction('1', 2)\n"),
             ("AST_FRACTION_STR", "x = Fraction(b'1', 2)\n"),
             ("AST_FRACTION_STR", "x = Fraction(f'{1}', 2)\n"),
+            ("AST_FRACTION_STR", "x = Fraction(s, 2)\n"),
+            ("AST_FRACTION_STR", "x = Fraction(True, 2)\n"),
             ("AST_FRACTION_STR", "x = mod.Fraction('1', 2)\n"),
         ):
             self.assertCode(code, vh.verify_pure_q_ast, bad_code)
@@ -91,6 +132,10 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
         self.assertCode("BAD_RATIONAL", vh.parse_q, 1)
         self.assertCode("BAD_RATIONAL", vh.parse_q, "2/4")
         self.assertCode("BAD_RATIONAL", vh.parse_q, "1/0")
+        self.assertCode("BAD_RATIONAL", vh.parse_q, ("9" * 1025) + "/1")
+        self.assertCode("BAD_RATIONAL", vh.parse_q, "1/" + ("9" * 1025))
+        self.assertEqual(vh.parse_q(("9" * 1024) + "/1"), Fraction(int("9" * 1024), 1))
+        self.assertEqual(vh.parse_q("1/" + ("9" * 1024)), Fraction(1, int("9" * 1024)))
         self.assertCode("BAD_DIVISOR", vh.q_div_int, Fraction(1, 2), 0)
         self.assertCode("BAD_DIVISOR", vh.q_div_int, Fraction(1, 2), True)
         self.assertCode("BAD_JSON", vh.canonical_json_bytes, {"x": object()})
@@ -123,6 +168,9 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             "45\ufeffW", "45\u00adW",
             "j/tok", "1 j/ tok", "tokens_per_joule", "x_nvml_y", "wa\u0000tt",
             "45.0% of stock power", "energy per token", "power-savings", "W 45.2",
+            "forty-five watts", "energy: 12", "J/token", "W/tok", "tok_per_mwh",
+            "nvmlDeviceGetTotalEnergyConsumption",
+            "wattage: 45", "2.25 A at 20 V", "20 V at 2.25 A", "100 W/ token",
         )
         good_values = (
             "5 ms", "latency 12", "70 C", "78\u00b0C", "70/78/85 C knees", "5 C deadband",
@@ -134,13 +182,22 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             "J2000 epoch-like", "J2000.0", "worker T10", "2024-W05", "sprint-W12", "node-w10",
             "q4-w3", "W-2", "W12", "kW12", "bench w/ perf counters", "taskset -c 3 w/ 5 reps",
             "12 ms/tok", "sm_clock 2100 MHz", "0.9 V", "1024 MiB/s",
+            "j = 3", "3 w/o pinning", "w/ tokens",
         )
-        self.assertEqual(len(bad_values), 83)
-        self.assertEqual(len(good_values), 50)
+        self.assertEqual(len(bad_values), 93)
+        self.assertEqual(len(good_values), 53)
         for bad in bad_values:
             self.assertTrue(vh.is_forbidden_energy_value(bad), f"must reject {bad!r}")
         for good in good_values:
             self.assertFalse(vh.is_forbidden_energy_value(good), f"false positive on {good!r}")
+        self.assertFalse(vh.is_forbidden_energy_key_name("empowerment_score"))
+        self.assertTrue(vh.is_forbidden_energy_key_name("wattage"))
+
+        # Linear-time ReDoS defense on long digit/dot/comma runs (< 0.1s)
+        for payload in ("1" * 8000, "1." * 3000, "1" + "," * 4000):
+            t0 = time.monotonic()
+            self.assertFalse(vh.is_forbidden_energy_value(payload))
+            self.assertLess(time.monotonic() - t0, 0.25)
 
         self.assertFalse(
             vh.has_forbidden_energy_claim(
@@ -275,22 +332,52 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             vh.verify_secded_and_smem_packer_oracle,
             sat_add_fn=lambda o, s, d, g: (((0xFFFF << 16) | 14), 0) if o == ((0x8000 << 16) | 7) and d == 0x8000 else vh.sat_add_packed_int(o, s, d, g),
         )
-        self.assertCode("ORACLE_PARSEVAL_FAIL", vh.verify_fwht256_fold_oracle, fwht_fn=lambda u: [0] * 256)
+        # Planted wrong FWHTs: drop bent4 signs, reverse input permutation, rotate output, negate output
+        def _fwht_drop_bent4(u):
+            buf = [0] * 256
+            for idx in range(256):
+                w = idx >> 5
+                lane = idx & 31
+                src_idx = ((w ^ (lane & 7)) << 5) | lane
+                buf[idx] = u[src_idx]
+            step = 1
+            while step < 256:
+                stride = step << 1
+                for base in range(0, 256, stride):
+                    for off in range(step):
+                        a, b = buf[base + off], buf[base + off + step]
+                        buf[base + off] = a + b
+                        buf[base + off + step] = a - b
+                step = stride
+            return buf
+
+        self.assertCode("ORACLE_FWHT_KAT", vh.verify_fwht256_fold_oracle, fwht_fn=_fwht_drop_bent4)
+        self.assertCode("ORACLE_FWHT_KAT", vh.verify_fwht256_fold_oracle, fwht_fn=lambda u: vh.fwht256_bent4_int(list(reversed(u))))
+        self.assertCode("ORACLE_FWHT_KAT", vh.verify_fwht256_fold_oracle, fwht_fn=lambda u: (lambda out: out[1:] + out[:1])(vh.fwht256_bent4_int(u)))
+        self.assertCode("ORACLE_FWHT_KAT", vh.verify_fwht256_fold_oracle, fwht_fn=lambda u: [-x for x in vh.fwht256_bent4_int(u)])
+
+        call_p = {"n": 0}
+        def _bad_parseval_fwht(u):
+            call_p["n"] += 1
+            if call_p["n"] <= 4:
+                return vh.fwht256_bent4_int(u)
+            return [0] * 256
+        self.assertCode("ORACLE_PARSEVAL_FAIL", vh.verify_fwht256_fold_oracle, fwht_fn=_bad_parseval_fwht)
         call_n = {"n": 0}
         def _bad_prefix_fwht(u):
             call_n["n"] += 1
             out = vh.fwht256_bent4_int(u)
-            if call_n["n"] == 3:
+            if call_n["n"] == 7:
                 return [x + 1 for x in out]
             return out
         self.assertCode("ORACLE_UPPER_ROUTING", vh.verify_fwht256_fold_oracle, fwht_fn=_bad_prefix_fwht)
         call_m = {"n": 0}
         def _bad_fold_fwht(u):
             call_m["n"] += 1
-            if call_m["n"] == 4:
+            if call_m["n"] == 8:
                 return _bad_fold_fwht.first
             out = vh.fwht256_bent4_int(u)
-            if call_m["n"] == 1:
+            if call_m["n"] == 5:
                 _bad_fold_fwht.first = out
             return out
         self.assertCode("ORACLE_UPPER_ROUTING", vh.verify_fwht256_fold_oracle, fwht_fn=_bad_fold_fwht)
@@ -357,9 +444,17 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             ("RESULTS_HARDWARE", True, lambda d: d["hardware"].__setitem__("device", "")),
             ("RESULTS_BINDINGS", True, lambda d: d.__setitem__("source_bindings", [])),
             ("RESULTS_BINDING_PATHS", True, lambda d: d["source_bindings"].__setitem__("kernel_cu_path", "wrong.cu")),
+            ("RESULTS_BINDING_PATHS", True, lambda d: d["source_bindings"].__setitem__("bench_cu_path", "wrong.cu")),
+            ("RESULTS_BINDING_PATHS", True, lambda d: d["source_bindings"].__setitem__("bpb_study_script_path", "wrong.py")),
+            ("RESULTS_BINDING_PATHS", True, lambda d: d["source_bindings"].__setitem__("ptxas_receipt_path", "wrong.json")),
+            ("RESULTS_BINDING_PATHS", True, lambda d: d["source_bindings"].__setitem__("corpus_external_binary_status", "BAD")),
             ("RESULTS_CU_BIND", True, lambda d: d["source_bindings"].__setitem__("kernel_cu_sha256", "0" * 64)),
             ("RESULTS_PTX_BIND", True, lambda d: d["source_bindings"].__setitem__("ptxas_receipt_sha256", "0" * 64)),
             ("RESULTS_BENCH_SHA", True, lambda d: d["source_bindings"].__setitem__("bench_cu_sha256", "bad")),
+            ("RESULTS_BPB_SCRIPT_SHA", True, lambda d: d["source_bindings"].__setitem__("bpb_study_script_sha256", "bad")),
+            ("RESULTS_CORPUS_SHA", True, lambda d: d["source_bindings"].__setitem__("corpus_manifest_sha256", "0" * 64)),
+            ("RESULTS_CORPUS_SHA", True, lambda d: d["source_bindings"].__setitem__("corpus_train_bin_sha256", "0" * 64)),
+            ("RESULTS_CORPUS_SHA", True, lambda d: d["source_bindings"].__setitem__("corpus_eval_bin_sha256", "0" * 64)),
             ("RESULTS_SILICON", True, lambda d: d.__setitem__("silicon_parity_and_canary", [])),
             ("RESULTS_CELL_PARITY", True, lambda d: d["silicon_parity_and_canary"].__setitem__("folded1k_cell_fp64_max_err_q", "1/10")),
             ("RESULTS_HEAD_PARITY", True, lambda d: d["silicon_parity_and_canary"].__setitem__("folded1k_head_fp64_max_err_q", "1/10")),
@@ -410,6 +505,7 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             self.assertCode(code, vh.verify_results_receipt, r2, ptx)
 
         self.assertCode("RESULTS_BENCH_DISK", vh.verify_results_receipt, res, ptx, expected_bench_cu_sha="0" * 64)
+        self.assertCode("RESULTS_BPB_SCRIPT_DISK", vh.verify_results_receipt, res, ptx, expected_bpb_script_sha="0" * 64)
 
         for field, val in (
             ("folded1k_cell_fp64_max_err_q", "0/1"),
@@ -482,6 +578,24 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             self.assertEqual(vh.main(["--check"]), 0)
         self.assertTrue(buf2.getvalue().startswith("PASS "))
 
+        # Subprocess entrypoint check kills if __name__ == "__main__" != mutant
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-B",
+                str(VERIFY_DIR / "verify_smem_canary_folded_fwht.py"),
+                "--check",
+                "--require-verdict",
+                "CONFIRMED",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(proc.stdout.startswith("PASS CONFIRMED result_sha256="), proc.stdout)
+
         with tempfile.TemporaryDirectory() as td:
             tdp = Path(td)
             self.assertCode("MISSING_FILE", vh.load_strict_canonical_json, tdp / "missing.json")
@@ -490,7 +604,13 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
                 self.assertEqual(vh.main(["--check", "--repo-root", str(tdp)]), 2)
             self.assertEqual(json.loads(err.getvalue())["code"], "MISSING_FILE")
 
-            for rel in (vh.KERNEL_CU_REL, vh.BENCH_CU_REL, vh.PTXAS_RECEIPT_REL, vh.RESULTS_RECEIPT_REL):
+            for rel in (
+                vh.KERNEL_CU_REL,
+                vh.BENCH_CU_REL,
+                vh.BPB_STUDY_SCRIPT_REL,
+                vh.PTXAS_RECEIPT_REL,
+                vh.RESULTS_RECEIPT_REL,
+            ):
                 dst = tdp.joinpath(rel)
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes(REPO_ROOT.joinpath(rel).read_bytes())
@@ -502,9 +622,152 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
             tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_text(dup_raw, encoding="utf-8")
             self.assertCode("DUPLICATE_JSON_KEY", vh.verify_on_disk, tdp)
 
-            # Non-finite JSON constant (NaN) fails closed!
+            # Non-finite JSON constant (NaN) and JSON float literal fail closed!
             tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_text("{\"x\": NaN}\n", encoding="utf-8")
             self.assertCode("NON_FINITE_JSON", vh.verify_on_disk, tdp)
+            tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_text("{\"x\": 1.5}\n", encoding="utf-8")
+            self.assertCode("JSON_FLOAT_FORBIDDEN", vh.verify_on_disk, tdp)
+
+            # 4400-digit integer JSON, bounded int boundary, and depth-64/65 cap fail closed with structured RC=2
+            self.assertEqual(vh._parse_bounded_int("9" * vh.MAX_Q_DIGITS), int("9" * vh.MAX_Q_DIGITS))
+            self.assertEqual(vh._parse_bounded_int("-" + "9" * vh.MAX_Q_DIGITS), -int("9" * vh.MAX_Q_DIGITS))
+            self.assertCode("READ_OR_PARSE_ERROR", vh._parse_bounded_int, "9" * (vh.MAX_Q_DIGITS + 1))
+            self.assertCode("READ_OR_PARSE_ERROR", vh._parse_bounded_int, "-" + "9" * (vh.MAX_Q_DIGITS + 1))
+            tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_text("{\"x\": " + ("9" * 4400) + "}\n", encoding="utf-8")
+            err_big = io.StringIO()
+            with contextlib.redirect_stderr(err_big):
+                self.assertEqual(vh.main(["--check", "--repo-root", str(tdp)]), 2)
+            self.assertEqual(json.loads(err_big.getvalue())["code"], "READ_OR_PARSE_ERROR")
+
+            depth_p = tdp / "depth.json"
+            ok_nest = {}
+            cur_d = ok_nest
+            for _ in range(vh.MAX_JSON_DEPTH):
+                nxt = {}
+                cur_d["a"] = nxt
+                cur_d = nxt
+            depth_p.write_text(json.dumps(ok_nest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertIsInstance(vh.load_strict_canonical_json(depth_p), dict)
+            depth_p.write_text(('{"a":' * (vh.MAX_JSON_DEPTH + 1)) + "{}" + ("}" * (vh.MAX_JSON_DEPTH + 1)) + "\n", encoding="utf-8")
+            self.assertCode("READ_OR_PARSE_ERROR", vh.load_strict_canonical_json, depth_p)
+            depth_p.write_text('{"a":' + ("[" * vh.MAX_JSON_DEPTH) + "{}" + ("]" * vh.MAX_JSON_DEPTH) + "}\n", encoding="utf-8")
+            self.assertCode("READ_OR_PARSE_ERROR", vh.load_strict_canonical_json, depth_p)
+            depth_p.write_text('{"a":' + ("[" * (vh.MAX_JSON_DEPTH + 1)) + "1" + ("]" * (vh.MAX_JSON_DEPTH + 1)) + "}\n", encoding="utf-8")
+            self.assertCode("READ_OR_PARSE_ERROR", vh.load_strict_canonical_json, depth_p)
+            with mock.patch.object(vh.json, "dumps", side_effect=RecursionError("deep")):
+                self.assertCode("READ_OR_PARSE_ERROR", vh._parse_strict_canonical_json_bytes, b"{}\n", "x")
+            depth_p.unlink()
+
+            # Symlink refusal on root, intermediate dirs, receipts, hashed source inputs, and self-read!
+            tdp.joinpath(vh.RESULTS_RECEIPT_REL).unlink()
+            tdp.joinpath(vh.RESULTS_RECEIPT_REL).symlink_to(REPO_ROOT.joinpath(vh.RESULTS_RECEIPT_REL))
+            err_sym = io.StringIO()
+            with contextlib.redirect_stderr(err_sym):
+                self.assertEqual(vh.main(["--check", "--repo-root", str(tdp)]), 2)
+            self.assertEqual(json.loads(err_sym.getvalue())["code"], "SYMLINK_FORBIDDEN")
+            tdp.joinpath(vh.RESULTS_RECEIPT_REL).unlink()
+            tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_bytes(REPO_ROOT.joinpath(vh.RESULTS_RECEIPT_REL).read_bytes())
+
+            tdp.joinpath(vh.KERNEL_CU_REL).unlink()
+            tdp.joinpath(vh.KERNEL_CU_REL).symlink_to(REPO_ROOT.joinpath(vh.KERNEL_CU_REL))
+            self.assertCode("SYMLINK_FORBIDDEN", vh.verify_on_disk, tdp)
+            tdp.joinpath(vh.KERNEL_CU_REL).unlink()
+            tdp.joinpath(vh.KERNEL_CU_REL).write_bytes(REPO_ROOT.joinpath(vh.KERNEL_CU_REL).read_bytes())
+
+            # Symlink root, non-directory root, symlink ancestor dir, & symlink self-parent fail closed
+            sym_root = tdp.parent / (tdp.name + "_symroot")
+            sym_root.symlink_to(tdp)
+            try:
+                self.assertCode("SYMLINK_FORBIDDEN", vh.verify_on_disk, sym_root)
+            finally:
+                sym_root.unlink()
+            self.assertCode("MISSING_FILE", vh.verify_on_disk, tdp / "no_such_root")
+            plain_root = tdp / "plain.txt"
+            plain_root.write_text("x", encoding="utf-8")
+            self.assertCode("NOT_REGULAR_FILE", vh.verify_on_disk, plain_root)
+            plain_root.unlink()
+
+            sym_parent_root = tdp / "sym_parent_repo"
+            sym_parent_root.mkdir()
+            (sym_parent_root / "cuda").symlink_to(tdp / "cuda")
+            self.assertCode("SYMLINK_FORBIDDEN", vh.verify_on_disk, sym_parent_root)
+
+            sym_self_dir = tdp / "sym_verify_dir"
+            sym_self_dir.symlink_to(VERIFY_DIR)
+            self.assertCode("SYMLINK_FORBIDDEN", vh._read_self_source_nofollow, sym_self_dir / "verify_smem_canary_folded_fwht.py")
+            self.assertCode("MISSING_FILE", vh._read_self_source_nofollow, tdp / "no_dir" / "v.py")
+            bad_utf8 = tdp / "bad_self.py"
+            bad_utf8.write_bytes(b"\xff\xfe")
+            self.assertCode("READ_OR_PARSE_ERROR", vh._read_self_source_nofollow, bad_utf8)
+            bad_utf8.unlink()
+            sym_self_dir.unlink()
+
+            # Non-regular dir/FIFO fail closed BEFORE os.open(), and PermissionError/fstat OSError are wrapped cleanly
+            with mock.patch.object(vh.os, "open", side_effect=AssertionError("MUST_NOT_OPEN")):
+                self.assertCode("NOT_REGULAR_FILE", vh.sha256_file, tdp)
+            fifo_p = tdp / "fifo.bin"
+            os.mkfifo(fifo_p)
+            with mock.patch.object(vh.os, "open", side_effect=AssertionError("MUST_NOT_OPEN")):
+                self.assertCode("NOT_REGULAR_FILE", vh.sha256_file, fifo_p)
+            fifo_p.unlink()
+
+            fifo_rel_root = tdp / "fifo_rel_repo"
+            fifo_rel_root.mkdir()
+            for rel in (vh.KERNEL_CU_REL, vh.BENCH_CU_REL, vh.BPB_STUDY_SCRIPT_REL, vh.PTXAS_RECEIPT_REL, vh.RESULTS_RECEIPT_REL):
+                dst = fifo_rel_root.joinpath(rel)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(REPO_ROOT.joinpath(rel).read_bytes())
+            fifo_rel_root.joinpath(vh.KERNEL_CU_REL).unlink()
+            os.mkfifo(fifo_rel_root.joinpath(vh.KERNEL_CU_REL))
+            real_open = os.open
+            leaf_opens: list[str] = []
+
+            def _track_leaf(p, flags, *a, **kw):
+                if "holosphere_smem_canary_folded_fwht_sm86.cu" in str(p):
+                    leaf_opens.append(str(p))
+                return real_open(p, flags, *a, **kw)
+
+            with mock.patch.object(vh.os, "open", side_effect=_track_leaf):
+                self.assertCode("NOT_REGULAR_FILE", vh.verify_on_disk, fifo_rel_root)
+            self.assertEqual(leaf_opens, [])
+
+            with mock.patch.object(vh.os, "open", side_effect=PermissionError("denied root")):
+                self.assertCode("MISSING_FILE", vh._read_rel_bytes_under_root_nofollow, tdp, vh.KERNEL_CU_REL)
+            with mock.patch.object(vh.os, "open", side_effect=PermissionError("denied file")):
+                self.assertCode("MISSING_FILE", vh.sha256_file, tdp.joinpath(vh.KERNEL_CU_REL))
+            tdp.joinpath(vh.KERNEL_CU_REL).unlink()
+            self.assertCode("MISSING_FILE", vh.verify_on_disk, tdp)
+            tdp.joinpath(vh.KERNEL_CU_REL).write_bytes(REPO_ROOT.joinpath(vh.KERNEL_CU_REL).read_bytes())
+
+            def _deny_leaf(p, flags, *a, **kw):
+                if "holosphere_smem_canary_folded_fwht_sm86.cu" in str(p):
+                    raise PermissionError("denied leaf")
+                return real_open(p, flags, *a, **kw)
+
+            with mock.patch.object(vh.os, "open", side_effect=_deny_leaf):
+                self.assertCode("MISSING_FILE", vh.verify_on_disk, tdp)
+            with mock.patch.object(vh.os, "fstat", side_effect=OSError("io fail")):
+                self.assertCode("READ_OR_PARSE_ERROR", vh.sha256_file, tdp.joinpath(vh.KERNEL_CU_REL))
+            with mock.patch.object(vh.os, "fstat", return_value=os.lstat(str(tdp))):
+                self.assertCode("NOT_REGULAR_FILE", vh.sha256_file, tdp.joinpath(vh.KERNEL_CU_REL))
+
+            # BPB study corpus SHA-256 constant binding fails closed if altered or unparseable
+            self.assertCode("BPB_STUDY_CORPUS_PIN_MISMATCH", vh._verify_bpb_study_corpus_pins, b"EXPECTED_TRAIN_BIN_SHA256 = '0'\n")
+            self.assertCode("READ_OR_PARSE_ERROR", vh._verify_bpb_study_corpus_pins, b"\xff\xfe")
+            self.assertCode("READ_OR_PARSE_ERROR", vh._verify_bpb_study_corpus_pins, b"def (\n")
+
+            big_bin = tdp / "oversized.bin"
+            big_bin.write_bytes(b"0" * (vh.MAX_FILE_BYTES + 1))
+            self.assertCode("FILE_TOO_LARGE", vh.sha256_file, big_bin)
+            big_bin.write_bytes(b"0" * vh.MAX_FILE_BYTES)
+            self.assertEqual(len(vh.sha256_file(big_bin)), 64)
+            big_bin.unlink()
+
+            # Single-file symlink refusal on sha256_file
+            sym_single = tdp / "sym_single.bin"
+            sym_single.symlink_to(tdp.joinpath(vh.KERNEL_CU_REL))
+            self.assertCode("SYMLINK_FORBIDDEN", vh.sha256_file, sym_single)
+            sym_single.unlink()
 
             # Non-canonical whitespace / trailing-byte tamper fails closed!
             tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_bytes(REPO_ROOT.joinpath(vh.RESULTS_RECEIPT_REL).read_bytes() + b"\n")
@@ -517,11 +780,14 @@ class TestSmemCanaryFoldedFwht(unittest.TestCase):
                 self.assertEqual(vh.main(["--check", "--repo-root", str(tdp)]), 2)
             self.assertEqual(json.loads(err2.getvalue())["code"], "READ_OR_PARSE_ERROR")
 
-            # Restore receipts and verify 1-byte tamper of either committed .cu file fails closed
+            # Restore receipts and verify 1-byte tamper of either committed .cu file or BPB study script fails closed
             tdp.joinpath(vh.RESULTS_RECEIPT_REL).write_bytes(REPO_ROOT.joinpath(vh.RESULTS_RECEIPT_REL).read_bytes())
             tdp.joinpath(vh.BENCH_CU_REL).write_bytes(REPO_ROOT.joinpath(vh.BENCH_CU_REL).read_bytes() + b"\n")
             self.assertCode("RESULTS_BENCH_DISK", vh.verify_on_disk, tdp)
             tdp.joinpath(vh.BENCH_CU_REL).write_bytes(REPO_ROOT.joinpath(vh.BENCH_CU_REL).read_bytes())
+            tdp.joinpath(vh.BPB_STUDY_SCRIPT_REL).write_bytes(REPO_ROOT.joinpath(vh.BPB_STUDY_SCRIPT_REL).read_bytes() + b"\n")
+            self.assertCode("RESULTS_BPB_SCRIPT_DISK", vh.verify_on_disk, tdp)
+            tdp.joinpath(vh.BPB_STUDY_SCRIPT_REL).write_bytes(REPO_ROOT.joinpath(vh.BPB_STUDY_SCRIPT_REL).read_bytes())
             tdp.joinpath(vh.KERNEL_CU_REL).write_bytes(REPO_ROOT.joinpath(vh.KERNEL_CU_REL).read_bytes() + b"\n")
             self.assertCode("PTXAS_CU_SHA_DISK", vh.verify_on_disk, tdp)
 
