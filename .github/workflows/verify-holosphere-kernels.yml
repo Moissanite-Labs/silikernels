@@ -1,0 +1,45 @@
+name: Verify HoloSphere S116/S117/V3 Receipts & Razor ABI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-holosphere-receipts-and-abi:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Pure-stdlib 3-mode isolated -I receipt & R5 verification
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          for flags in "-I -B" "-I -O -B" "-I -B -W error"; do
+            python3 $flags verify/verify_holosphere_receipts.py --check --json
+            python3 $flags verify/test_verify_holosphere_receipts_r5.py
+          done
+
+      - name: C11 & C++17 UBSan ABI check on include/razor_abi_4byte_sys.h
+        run: |
+          make verify-razor-abi
+          rm -rf build
+
+      - name: Hygiene & leak check across new HoloSphere kernel files
+        run: |
+          if grep -rnE '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}' include/ verify/ cuda/sm86/holosphere_*.cu cuda/sm86/holosphere_s116_s117.mk receipts/s116_* receipts/s117_* receipts/v3_frontier_* receipts/mlos_zone_b_s11*; then
+            echo "ERROR: leak detected" >&2
+            exit 1
+          fi
+          echo "HOLOSPHERE_HYGIENE_PASS=1"

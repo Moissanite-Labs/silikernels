@@ -1,0 +1,96 @@
+{
+  "all_live_gates_pass": true,
+  "bare_metal_rtx3080": {
+    "chunk32_woodbury_bwd_ab_t8192": {
+      "choice_a_4224B_gb_per_s": 11.46,
+      "choice_a_4224B_mj_12layers": 36796.167,
+      "choice_a_4224B_ms_12layers": 667.7654,
+      "choice_a_4224B_tok_per_s": 49071.12,
+      "choice_b_6336B_gb_per_s": 14.36,
+      "choice_b_6336B_mj_12layers": 29809.5,
+      "choice_b_6336B_ms_12layers": 532.7331,
+      "choice_b_6336B_tok_per_s": 61509.22,
+      "gpu_a_vs_b_gS_max_abs_diff": 3.27976886e-06,
+      "shape": {
+        "B": 4,
+        "C": 32,
+        "D": 512,
+        "H": 16,
+        "L": 12,
+        "T": 8192,
+        "stride_t": 512
+      },
+      "speedup_choice_b_over_a": 1.2535,
+      "temp_after_c": 65
+    },
+    "device": "NVIDIA GeForce RTX 3080 Laptop GPU",
+    "live_sys_ber_canary": {
+      "clean_canary_count": 0,
+      "ded1_canary_count": 1,
+      "ded1_flagged_no_silent_miscorrect": true,
+      "sec16_canary_count": 16,
+      "sec16_max_abs_diff_vs_clean": 0.0,
+      "sec16_out_byte_bit_exact": true
+    },
+    "sm_count": 48,
+    "uniform_cell_16warp_d512": {
+      "d_model": 512,
+      "layers": 12,
+      "t2048_l2pin_mj_per_tok": 8.85553,
+      "t2048_l2pin_us_per_tok": 249.3864,
+      "t2048_mj_per_tok": 9.35162,
+      "t2048_us_per_tok": 251.8149,
+      "t8192_mj_per_tok": 9.30927,
+      "t8192_us_per_tok": 249.3671,
+      "temp_after_c": 61
+    }
+  },
+  "cu_bench_sha256": "7174315519f1597828b842a71d78b9b623afd1cad5659ca2dcb736615259a647",
+  "cu_kernels_sha256": "ade82cc9fb7c7196c34bb6ecadeaf521bfe17db9b1e37197a768e3b2e52b6af5",
+  "cu_rel": "cuda/sm86/holosphere_h256_chunk32_sm86.cu",
+  "cu_sha256": "ade82cc9fb7c7196c34bb6ecadeaf521bfe17db9b1e37197a768e3b2e52b6af5",
+  "live_gpu_torch_compile_and_t8192_vram": {
+    "cuda_device": "NVIDIA GeForce RTX 3080 Laptop GPU",
+    "t8192_live_finite_grads": true,
+    "t8192_live_fwd_bwd_shape": {
+      "B": 4,
+      "C": 32,
+      "D": 512,
+      "H": 16,
+      "T": 8192
+    },
+    "t8192_live_peak_allocated_mib": 598.83,
+    "t8192_live_peak_reserved_mib": 650.0,
+    "torch_compile_fullgraph_backend": "inductor",
+    "torch_compile_fullgraph_fp64_worst_err": 1.243e-14,
+    "torch_compile_fullgraph_pass": true
+  },
+  "live_gpu_vs_fp64_autograd_parity": {
+    "choice_a_4224B": {
+      "max_abs_err_vs_fp64_autograd": {
+        "grad_S_0": 0.000193,
+        "grad_U_0": 0.0001529,
+        "grad_W_q": 5.512e-05,
+        "grad_w_su2": 0.0002243,
+        "grad_x": 0.0001818
+      },
+      "worst_err_vs_fp64_autograd": 0.0002243
+    },
+    "choice_b_6336B": {
+      "max_abs_err_vs_fp64_autograd": {
+        "grad_S_0": 0.0001797,
+        "grad_U_0": 0.0001276,
+        "grad_W_q": 6.142e-05,
+        "grad_w_su2": 0.0002248,
+        "grad_x": 0.0001809
+      },
+      "worst_err_vs_fp64_autograd": 0.0002248
+    },
+    "fwd_xt_max_abs_err_vs_fp64": 2.157e-07,
+    "fwd_y_max_abs_err_vs_fp64": 6.502e-05
+  },
+  "mlos_zone_b_receipt_file": "receipts/mlos_zone_b_s117_live.json",
+  "mlos_zone_b_receipt_sha256": "fef9d2696e639ef82e3892a3e45a87e74201e9f0cdf21576ecbbd85594029cba",
+  "parent_commit_sha": "44eccad8dfa38bcc397c45420680d62d0020c585",
+  "schema": "holosphere.track_s117.live_rtx3080_zone_b.v1"
+}
