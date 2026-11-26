@@ -5,25 +5,66 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   cpu-build-and-hygiene:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Leak & hygiene check
         run: |
-          if grep -rnE '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}' cuda/ cpu/ receipts/ lean/ README.md Makefile; then
+          set -euo pipefail
+          set +e
+          grep -rnE '[/]home/|[/]Users/|hf_[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|sk-(proj-)?[A-Za-z0-9_-]{20}|AKIA[0-9A-Z]{16}' .github/ cuda/ cpu/ include/ verify/ receipts/ lean/ README.md Makefile
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
             echo "ERROR: leak detected" >&2
             exit 1
+          elif [ "$rc" -ne 1 ]; then
+            echo "ERROR: hygiene grep failed with exit code $rc" >&2
+            exit "$rc"
           fi
           echo "HYGIENE_PASS=1"
 
       - name: Compile portable & AVX-512 C targets
         run: |
+          set -euo pipefail
           mkdir -p build
-          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -fopenmp -shared -fPIC cpu/avx512/qwen25_avx512_a16_engine.c -lm -o build/libqwen25_avx512_a16_engine.so
-          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -fopenmp cpu/avx512/aletheion_avx512_a16_decoder.c -lm -o build/aletheion_avx512_a16_decoder
-          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -pthread cpu/avx512/s71_proximity_bench.c -lm -o build/s71_proximity_bench
+          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma -fopenmp -shared -fPIC cpu/avx512/qwen25_avx512_a16_engine.c -lm -o build/libqwen25_avx512_a16_engine.so
+          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma -fopenmp cpu/avx512/aletheion_avx512_a16_decoder.c -lm -o build/aletheion_avx512_a16_decoder
+          gcc -O3 -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -mf16c -mfma -pthread cpu/avx512/s71_proximity_bench.c -lm -o build/s71_proximity_bench
+          gcc -O3 -std=c11 -Wall -Wextra -Werror -mavx512f -mavx512bw -mavx512vl -mavx512vbmi -mavx512vpopcntdq -mavx512vnni -pthread cpu/avx512/holosphere_v3_avx512.c -lm -o build/holosphere_v3_avx512
+          gcc -O3 -std=c11 -Wall -Wextra -Werror -pthread cpu/avx512/holosphere_v3_avx512.c -lm -o build/holosphere_v3_scalar
           gcc -O3 cpu/avx512/hf_reference_avx512_a16_blockh4.c -lm -o build/hf_reference_avx512_a16_blockh4
           ./build/hf_reference_avx512_a16_blockh4
+          for t in 1 4; do
+            CUDA_VISIBLE_DEVICES="" ./build/holosphere_v3_scalar --mode trace --backend scalar --threads "$t" | python3 -I -B -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          ok = (
+              d.get("logits_fnv1a64") == "6fc017bea5754bb1"
+              and d.get("hidden_fnv1a64") == "3a65e5960be737a7"
+              and d.get("greedy_tokens") == [149, 239, 169, 143, 89, 215, 50, 229]
+              and d.get("secded_16sec_120ded_pass") is True
+              and d.get("pack_syndrome_errors") == 0
+              and d.get("runtime_syndrome_faults") == 0
+          )
+          if not ok:
+              raise SystemExit(f"holosphere_v3_scalar trace mismatch: {d}")
+          print("HOLOSPHERE_V3_SCALAR_TRACE_PASS threads=" + str(d["threads"]))
+          '
+          done
+          rm -rf build
+
+      - name: Verify HoloSphere AVX-512 L3 receipts & README figures (3-mode isolated -I)
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          make verify-holosphere-avx512
+          make verify-readme-figures

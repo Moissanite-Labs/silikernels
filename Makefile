@@ -22,7 +22,7 @@ CUDA_BINS := \
 	$(BUILD)/hf_reference_sm86_a16_blockh4 \
 	$(BUILD)/libsu2_holonomy_scan_sm86.so
 
-.PHONY: all cpu cuda clean check-zero-spill
+.PHONY: all cpu cuda clean check-zero-spill verify-readme-figures
 
 all: cpu cuda
 
@@ -74,6 +74,38 @@ $(BUILD)/hf_reference_sm86_a16_blockh4: cuda/sm86/hf_reference_sm86_a16_blockh4.
 
 $(BUILD)/libsu2_holonomy_scan_sm86.so: cuda/sm86/su2_holonomy_scan_sm86.cu | $(BUILD)
 	$(NVCC) $(CUDA_FLAGS) --shared -Xcompiler -fPIC $< -o $@
+
+# Fail-closed zero-spill gate across all 50/50 HoloSphere sm_86 kernels
+# (23/23 S116/S117/V3 + 27/27 SU(2) holonomy). Legacy qwen25_sm86_a16_engine.cu
+# is intentionally excluded here because rope_kv_append_kernel allocates a 32 B
+# stack frame (15/16 0 B stack; 0 B spill stores/loads) under nvcc 13.2.
+check-zero-spill: | $(BUILD)
+	@set -eu; \
+	if ! command -v "$(NVCC)" >/dev/null 2>&1 && [ ! -x "$(NVCC)" ]; then \
+		echo "ERROR: NVCC ($(NVCC)) not found; cannot certify sm_86 zero-spill gate" >&2; \
+		exit 1; \
+	fi; \
+	$(MAKE) check-holosphere-zero-spill; \
+	LOG=$(BUILD)/su2_ptxas_spill.log; \
+	trap 'rm -f "$$LOG"' EXIT; \
+	$(MAKE) -B $(BUILD)/libsu2_holonomy_scan_sm86.so >"$$LOG" 2>&1 || { cat "$$LOG"; exit 1; }; \
+	if grep -E '([1-9][0-9]* bytes stack frame|[1-9][0-9]* bytes spill stores|[1-9][0-9]* bytes spill loads)' "$$LOG"; then \
+		echo "ERROR: non-zero register/stack spill detected in SU(2) sm_86 kernels" >&2; \
+		exit 1; \
+	fi; \
+	SU2_COUNT=$$(grep -cE '(^|[^0-9])0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads' "$$LOG"); \
+	if [ "$$SU2_COUNT" -ne 27 ]; then \
+		echo "ERROR: expected 27 zero-spill SU(2) kernels, got $$SU2_COUNT" >&2; \
+		exit 1; \
+	fi; \
+	echo "ZERO_SPILL_HOLOSPHERE_50_OF_50_VERIFIED=1 (23 + $$SU2_COUNT kernels)"
+
+verify-readme-figures:
+	@set -e; \
+	for flags in "-I -B" "-I -O -B" "-I -B -W error"; do \
+		CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $$flags verify/check_readme_figures.py --check --json; \
+		CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $$flags verify/test_check_readme_figures_r5.py; \
+	done
 
 clean:
 	rm -rf ./build
