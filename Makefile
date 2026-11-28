@@ -22,13 +22,14 @@ CUDA_BINS := \
 	$(BUILD)/hf_reference_sm86_a16_blockh4 \
 	$(BUILD)/libsu2_holonomy_scan_sm86.so
 
-.PHONY: all cpu cuda clean check-zero-spill
+.PHONY: all cpu cuda clean check-zero-spill test-cpu verify-v2-sass
 
 all: cpu cuda
 
 cpu: $(BUILD) $(CPU_BINS)
 
 include cuda/sm86/holosphere_s116_s117.mk
+include cuda/sm86/a16_v2_ampere.mk
 
 cuda: $(BUILD) $(CUDA_BINS)
 
