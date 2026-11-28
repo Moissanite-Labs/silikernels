@@ -40,6 +40,26 @@ make check-holosphere-zero-spill
 
 ---
 
+## V2 Zero-Spill Ampere `sm_86` (`dp4a22` / `IMMA K=64` / `256 B` Woodbury) & `AVX-512` `B*=2` `SWAR127` Modules
+
+Building on the HoloSphere `sm_86` and `AVX-512` runtime foundations, the V2 kernel & contract layer adds modular zero-spill CUDA/C primitives, `.so` shared libraries, standalone `--cpu-selftest` harnesses, and `3x -I` `ptxas`/SASS + pure-CPU CI verification:
+
+| Component | Scope | Verified Contracts & Gates | Target / Verifier |
+| :--- | :--- | :--- | :--- |
+| **[`include/silikernels_v2_contracts.h`](include/silikernels_v2_contracts.h)** | Shared C11/C++17 Header | Carry-free `[1..127]` `SWAR127` domain-guarded negation (`~x + 0x0101010101010101` with fail-closed `0` trap outside `[1..127]`), `0`-ULP canonical `128`-lane binary tree reduction, Extended Hamming `[16, 11, 4]` `SECDED-64` (`SEC` repair / `DED` safe-halt), IEEE `CRC32`, `IRIS` mixer (`0x9E3779B9`), `SilikernelsV2ActQ22`, and cold crossover thresholds (`B*=2` @ `3.125 bpw`, `B*=3` @ `4.5 bpw`) | Verified via `make verify-razor-abi` + `make test-cpu` |
+| **[`cpu/avx512/a16_v2_avx512_swar.c`](cpu/avx512/a16_v2_avx512_swar.c)** | Intel `AVX-512` VNNI / VPOPCNTDQ + Portable C11 Fallback | `22`-bit radix-`128` 3-limb (`dpbusd22`) fused `H_4` activation quantizer; `4.5 bpw` (`18 B/32w`) & `3.125 bpw` (`50 B/128w` SoA) deterministic `8`-thread pthread cold-expert GEMV (`B < B*`), live `SECDED` repair/trap, `0`-ULP `1` vs `8` thread parity, and `SWAR127` self-tests | `liba16_v2_avx512.so`, `liba16_v2_portable.so`, `a16_v2_avx512_swar`, `a16_v2_portable_swar` |
+| **[`cuda/sm86/a16_v2_ampere_kernels.cuh`](cuda/sm86/a16_v2_ampere_kernels.cuh)** + **[`cuda/sm86/a16_v2_ampere_kernels.cu`](cuda/sm86/a16_v2_ampere_kernels.cu)** + **[`cuda/sm86/a16_v2_ampere_bench.cu`](cuda/sm86/a16_v2_ampere_bench.cu)** | Ampere `sm_86` (`__launch_bounds__(128, 10)`) + `.so` / Bench Harness | `9` kernels: canonical `0`-ULP `tree_reduce_128_sm86`, `H_4` `quant22_h4`, `dp4a22` `B=1` GEMV (`4.5` & `3.125 bpw`) with `1-LOP3 + 5-POPC` live `SECDED`, `B <= 16` `IMMA K=64` (`m16n8k32`), Split-K `BF16` MMA (`m16n8k16`), hoisted `256 B` constant-memory rank-8 Cayley–Woodbury inverse + apply (`c_wb_inv_256b[64]`), and `IRIS` canary finalizer | `make verify-v2-sass` audits `.o`, `.so`, and bench (`<= 48` regs, `0 B` stack/spill, `0` SASS `LDL`/`STL`) |
+
+```bash
+# Run pure-CPU C ABI, SWAR127 exhaustive [0..255] checks, 0-ULP tree reduce, SECDED, and 3x -I suites:
+make test-cpu
+
+# Compile .o, .so, and standalone bench for sm_86 and audit ptxas + cuobjdump SASS + CPU ABI (no GPU required):
+make verify-v2-sass
+```
+
+---
+
 ## Core Low-Level Techniques
 
 1. **Direct Raw-Word 5-Bit Extended Hamming `[16, 11, 4]` Syndrome (`1 LOP3 + 5 POPC`):** Eliminates scalar bit-extraction loops via `lop3.b32(lo, hi, 0x11111111u, 0x28)` followed by five masked `__popc` reductions (and `vpopcntq` on AVX-512), reducing live syndrome verification overhead to **`0.4%–4.3%`** at zero register spill (`0.4%`: `s52_sm86_ptx_foundry_results.json` live-verify vs. same-protocol arm; `4.3%`: `s58_qwen25_live_engine_results.json` `b2_live_5popc_verify.verify_overhead_backbone_pct = 4.275`).
@@ -86,6 +106,7 @@ receipts/      Verified hardware benchmark, SASS (cuobjdump), and AVX-512 ISA in
 - **Hardware Tuning:** Inline PTX instructions (`lop3`, `prmt`, `dp4a`, `cp.async`, `mma.sync.m16n8k32`) target NVIDIA Ampere (`sm_86+`); `__nv_bfloat16` kernels in `su2_holonomy_scan_sm86.cu` require `ARCH >= sm_80`; CPU targets require `AVX-512F/BW/VL/VBMI/VNNI/VPOPCNTDQ` (with portable fallback in `hf_reference_avx512_a16_blockh4.c`).
 - **SU(2) Holonomy Receipt Scope:** `receipts/su2_holonomy_sm86_ptxas_receipt.json` directly certifies offline `nvcc 13.4` (`-arch=sm_86`) compilation, `27/27` zero-spill `ptxas`, PTX (`ld.local=0, st.local=0`), and SASS (`LDL=0, STL=0`) inspection for `cuda/sm86/su2_holonomy_scan_sm86.cu` inside this repository; this README quotes no SU(2) timing figures, because no receipt in this repository records them.
 - **HoloSphere `S116`/`S117`/`V3` Receipt & Provenance Scope:** All `4` live RTX 3080 (`GA104M`, driver `615.78.08`) result JSONs in `receipts/` (`s116_phase2b_gpu_results.json`, `s117_live_rtx3080_zone_b_results.json`, `s117_live_v2_d512_zone_b_results.json`, `s117_v3_frontier_live_gpu_results.json`) were freshly replayed directly against the committed `cuda/sm86/*.cu` sources at `git_head = 44eccad8dfa38bcc397c45420680d62d0020c585` under Ring-0 `mlos gpu-lease --mode train` + `mlos stamp-run --zone B --require-gpu`. `verify/verify_holosphere_receipts.py` fails closed unless every live result JSON carries exact `cu_sha256` (and `cu_kernels_sha256` on `s117_v1`) matching live `cuda/sm86/*.cu` bytes (`bb64939c…`, `ade82cc9…`, `61173b2c…`), `parent_commit_sha == 44eccad8…`, and `mlos_zone_b_receipt_sha256` matching its canonical Zone-B receipt (`bec7b99b…`, `fef9d269…`, `699c3d05…`, `feecc748…`). In `receipts/s117_v3_frontier_live_gpu_results.json`, `v3_d512` CUDA-graph latency is recorded at `T=8192` for CellOp (`20.5038 µs/tok`) and `T=16384` for E2E (`21.5184 µs/tok`, `46,471.91 tok/s`), while matched `T=8192` non-graph timings are `21.2371 µs/tok` CellOp vs. `22.2406 µs/tok` E2E (`1.0035 µs/tok` difference); both reflect the `16`-warp `d=512` kernel `s117_uniform_cell_16warp_d512_v3_sm86`, and `s117_chunk32_bwd_wmma_sm86` (`148,153.42 tok/s` over `B=4, T=8192, D=512`) measures the standalone `Chunk32` backward kernel rather than full PyTorch optimizer wall-clock.
+- **V2 (`a16_v2_*`) Verification Scope:** The V2 module verification (`make test-cpu` and `make verify-v2-sass`) certifies C11/AVX-512 compilation, `ctypes` ABI parity, exhaustive `SWAR127` `[0..255]` domain bounds, `0`-ULP `tree_reduce_128`, `SECDED-64` fault recovery/halt, `256 B` rank-8 Woodbury inversion, and offline `nvcc --ptxas-options=-v` + `cuobjdump --dump-sass` constraints (`<= 48` registers, `0 B` stack/spill, `0` `LDL`/`STL`) across `.o`, `.so`, and standalone bench builds without live GPU kernel execution; no new V2 GPU wall-clock receipt is claimed here.
 
 ## License
 
