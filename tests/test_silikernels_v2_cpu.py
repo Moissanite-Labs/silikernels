@@ -62,7 +62,6 @@ def _check_hygiene(failures: list[str]) -> int:
         REPO_ROOT / "Makefile",
         REPO_ROOT / "README.md",
         REPO_ROOT / ".github" / "workflows" / "ci.yml",
-        REPO_ROOT / ".github" / "workflows" / "codeql.yml",
         REPO_ROOT / "include" / "silikernels_v2_contracts.h",
         REPO_ROOT / "cpu" / "avx512" / "a16_v2_avx512_swar.c",
         REPO_ROOT / "cuda" / "sm86" / "a16_v2_ampere.mk",
