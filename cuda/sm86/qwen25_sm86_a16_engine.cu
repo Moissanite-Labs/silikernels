@@ -340,8 +340,16 @@ __global__ void rope_kv_append_kernel(
     int j = threadIdx.x & 31;
     float inv_freq = powf(QWEN_ROPE_THETA, -float(2 * j) / float(QWEN_HEAD_DIM));
     float angle = float(pos) * inv_freq;
-    float c = cosf(angle);
-    float s = sinf(angle);
+    // cosf/sinf on CUDA 13.x reserve a 32 B stack frame for their slow-path range
+    // reduction. Reduce the angle ourselves in double precision (pos < MAX_SEQ_LEN
+    // bounds |angle| <= 511, so plain fmod is exact enough) and use the approx
+    // __sincosf on the reduced argument in [-pi, pi], which needs no stack frame.
+    // Host-side check (verify/rope_angle_check.c): max |old-new| = 5.96e-08 over
+    // all pos in [0,512), j in [0,32); device __sincosf adds <= 2^-21.41 abs.
+    double ang_r = fmod((double)angle, 6.283185307179586476925286766559);
+    if (ang_r > 3.141592653589793238462643383279) ang_r -= 6.283185307179586476925286766559;
+    float c, s;
+    __sincosf((float)ang_r, &s, &c);
 
     int q_base = head * QWEN_HEAD_DIM;
     float q0 = q_vec[q_base + j];

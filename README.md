@@ -14,6 +14,9 @@ Developed within **Moissanite Labs** alongside [Moissanite-Labs/siliquant](https
 | **[`cuda/sm86/aletheion_sm86_ptx_foundry.cu`](cuda/sm86/aletheion_sm86_ptx_foundry.cu)** | Ampere `sm_86` PTX/SASS | **`646.51 Gweights/s`** (`102.03%` STREAM Triad) fused `4.5 bpw` `A_16` `LDG.128 + LOP3 + PRMT + dp4a.u32.s32` GEMV; live `5-POPC` syndrome verify at `643.29 Gw/s` (`0.4%` overhead vs. the same-protocol `645.76 Gw/s` arm); zero-shmem warp-shuffle `WHT_8`/`H_16` (`463.89 Gw/s`); `O(1)` register-delta live repair (`478.46 Gw/s`); batched `B=32` `cp.async + IMMA.16832` (`14.90 INT8 TOPS`) | `15/15` kernels `0 B` spill, `0` verify fails · [`siliquant#83`](https://github.com/Moissanite-Labs/siliquant/pull/83) · [`receipts/s52_sm86_ptx_foundry_results.json`](receipts/s52_sm86_ptx_foundry_results.json) |
 | **[`cpu/avx512/s71_proximity_bench.c`](cpu/avx512/s71_proximity_bench.c)** | Intel `AVX-512` VNNI | **`146.892 Gweights/s`** (`total_ops / ns` of `avx512_a16_blockh4_dual_force[0]`) multicore `A_16 + BlockH4` on `Qwen2.5-3B` `2048×11008` via `64 B` cache-line read-shared proximity fusion (**`6.982×` faster** per weight than the `8 B` row of `avx512_a16_blockh4_stride_sweep`, computed from the per-op `ns` of the two suites in the same receipt) | `20/20` pure-`Init` `Lean 4.36.0` proofs in [`lean/ProximityBarrierSilicon.lean`](lean/ProximityBarrierSilicon.lean) · [`aletheia#71`](https://github.com/Foundation-0/aletheia/pull/71) · [`receipts/s71_proximity_avx512_results.json`](receipts/s71_proximity_avx512_results.json) |
 | **[`cpu/avx512/aletheion_avx512_a16_decoder.c`](cpu/avx512/aletheion_avx512_a16_decoder.c)** | Intel `AVX-512` VBMI/VNNI | **`60.95–80.21 Gweights/s`** fused `vpermb + vpdpbusd` VNNI GEMV + live `vpopcntq` verify; **`223.19 Mweights/s`** exact bit-identical `18 B/32 w` enumerative `hampack.c` | `0` bit mismatches, `0` syndrome errors · [`siliquant#83`](https://github.com/Moissanite-Labs/siliquant/pull/83) · [`receipts/s52_avx512_a16_benchmark_results.json`](receipts/s52_avx512_a16_benchmark_results.json) |
+| **[`cuda/sm86/rtx3080_siliquant_a16_kernels.cu`](cuda/sm86/rtx3080_siliquant_a16_kernels.cu)** | Ampere `sm_86` PTX | Bare-metal `sm_86` STREAM Triad / FMA / `dp4a` roofline calibration and a fused GEMV shootout across the `A_16` axis-aligned, `A_16 + H_16`, `Block-H2`, `E_8 + WHT_8`, `hampack` and `hammingindex` layouts | No result receipt in `receipts/`; covered by `make check-zero-spill` · [`siliquant#81`](https://github.com/Moissanite-Labs/siliquant/pull/81) |
+| **[`cpu/avx2/e8had_simd_bench.c`](cpu/avx2/e8had_simd_bench.c)** & **[`cpu/avx2/e8_stage1_bench.c`](cpu/avx2/e8_stage1_bench.c)** | C11 `AVX2` / `FMA` | Zero-division `E_8` / `WHT_8` batched SIMD unranking, `O(1)` CDF-prefix bucket guide tables, branchless Eytzinger `cmov` search, and `D_8^+` `pshufb`/`psignb` orbit unrankers. Derived from [`siliquant studies/audit115r-e8had-simd-ballpack/c-bench/e8had_simd_bench.c`](https://github.com/Moissanite-Labs/siliquant/blob/main/studies/audit115r-e8had-simd-ballpack/c-bench/e8had_simd_bench.c) and [`studies/audit116r-e8-leaf-stage1-attack/c-bench/e8_stage1_bench.c`](https://github.com/Moissanite-Labs/siliquant/blob/main/studies/audit116r-e8-leaf-stage1-attack/c-bench/e8_stage1_bench.c); they were byte-identical copies but now carry safety fixes (cols alignment validation in the public GEMV APIs, encoded `zero_pt` in the Q4 baseline, fail-closed `e8s1_init` table-width check, initialized rejected leaves, validated `e8s1_d8_unrank_shell_vec`), so they are **no longer byte-identical** to the siliquant sources | `-Wall -Wextra -Werror` clean, functional smoke tests in [`cpu/avx2/tests/`](cpu/avx2/tests) run by `make check-avx2-smoke` and CI · [`siliquant#36`](https://github.com/Moissanite-Labs/siliquant/pull/36) · [`siliquant#39`](https://github.com/Moissanite-Labs/siliquant/pull/39) |
+| **[`cpu/rapl/rapl_landauer_microkernels.c`](cpu/rapl/rapl_landauer_microkernels.c)**, **[`cpu/rapl/granular_silicon_microprobe.c`](cpu/rapl/granular_silicon_microprobe.c)** & **[`cpu/rapl/two_way_silicon_probe.c`](cpu/rapl/two_way_silicon_probe.c)** | Linux `intel-rapl` + `RDTSC` | Source-only measurement harnesses for the `intel-rapl` energy counters and `RDTSC` timing. They write raw JSON telemetry. This README publishes no results from them: laptop energy measurements are uncontrolled and stay out of public copy. | Pure-integer JSON telemetry, `-Wall -Wextra -Werror` clean · [`aletheia#66`](https://github.com/Foundation-0/aletheia/pull/66) · [`aletheia#65`](https://github.com/Foundation-0/aletheia/pull/65) · [`aletheia#60`](https://github.com/Foundation-0/aletheia/pull/60) |
 | **[`cuda/sm86/hf_reference_sm86_a16_blockh4.cu`](cuda/sm86/hf_reference_sm86_a16_blockh4.cu)** + **[`cpu/avx512/hf_reference_avx512_a16_blockh4.c`](cpu/avx512/hf_reference_avx512_a16_blockh4.c)** | Ampere `sm_86` + `AVX-512` | Self-contained standalone reference kernels bundled with [`siliquant-hf-v1`](https://huggingface.co/collections/ahrazzle/siliquant-stratified-lattice-quantized-llms-6b060e6988afd65942cd7768) public Hugging Face releases | [`siliquant#100`](https://github.com/Moissanite-Labs/siliquant/pull/100) |
 | **[`cuda/sm86/su2_holonomy_scan_sm86.cu`](cuda/sm86/su2_holonomy_scan_sm86.cu)** | Ampere `sm_86` PTX/SASS | **27 fused `SU(2)` quaternion holonomy, covariant `(Q,K,V)` transport, spherical SLERP/Hopf-$S^3$, `cayley_su2`, & Beltrami `Cayley2x2` kernels** (`float4` = 1 unit quaternion, zero-permute strided BHTD FP32/BF16, 3-float $\mathfrak{su}(2)$ additive backward suffix sum). | `27/27` kernels `0 B` spill, `0` PTX `ld/st.local`, `0` SASS `LDL`/`STL` · [`receipts/su2_holonomy_sm86_ptxas_receipt.json`](receipts/su2_holonomy_sm86_ptxas_receipt.json) |
 
@@ -61,19 +64,41 @@ make cuda
 
 # Build everything
 make all
+
+# Static zero-spill gate (fail closed): requires exactly EXPECTED_KERNELS (153)
+# ptxas entries, every one 0 B stack frame / 0 B spill; it fails when no ptxas
+# diagnostics are parsed (for example with NVCC=true).
+make check-zero-spill
+
+# Functional smoke tests for libe8had_simd.so / libe8_stage1.so (init, decode,
+# GEMV equivalence vs an independent double reference, rejected-rank /
+# unaligned-cols / zero-point edge cases), each run against the AVX2 library
+# and a scalar (-mno-avx2) rebuild whose decode digest must match
+make check-avx2-smoke
+
+# Host-side accuracy check for the rope_kv_append_kernel RoPE angle reduction
+# (old cosf/sinf vs new fmod+__sincosf, against a double reference)
+make check-rope-angle
 ```
 
 Override toolchain paths or GPU target architecture via `make NVCC=nvcc ARCH=sm_86 CC=gcc`.
+
+**Toolchain & count notes:** `make cpu` builds the `9` targets in `CPU_BINS`; `make cuda` builds `13` CUDA targets (`CUDA_BINS` plus `HOLOSPHERE_CUDA_BINS` from `cuda/sm86/holosphere_s116_s117.mk`). `make check-zero-spill` fails closed unless `ptxas` reports exactly `EXPECTED_KERNELS` (`153`) kernel entries, every one `0 B` stack frame / `0 B` spill. `rope_kv_append_kernel` in `cuda/sm86/qwen25_sm86_a16_engine.cu` now reduces the RoPE angle with double `fmod` + `__sincosf` instead of `cosf`/`sinf`, whose slow path reserved a local stack frame; `make check-rope-angle` compares the old and new reductions against a double reference. The committed [`receipts/s58_sm86_engine_sass_inspection.json`](receipts/s58_sm86_engine_sass_inspection.json) predates this fix: its `source_sha256` pins the pre-fix engine source, so it no longer matches the current file bytes; it is kept unchanged as evidence.
+
+**CI notes:** `.github/workflows/ci.yml` builds all CPU targets, runs `make check-avx2-smoke` (AVX2 functional tests) and `make check-rope-angle`, and the `hf_reference_avx512_a16_blockh4` self-test step prints `SELFTEST_ISA_PATH` labeling the path that actually executed (`AVX-512 VNNI` or `scalar fallback`) instead of claiming AVX-512 — on GitHub-hosted runners (no AVX-512) the scalar fallback runs; the AVX-512 path is exercised on AVX-512 hosts, not via emulation.
 
 ---
 
 ## Repository Layout
 
 ```text
-cuda/sm86/     Bare-metal Ampere sm_86 PTX/SASS CUDA kernels & full-model Qwen2.5 shared engine
-cpu/avx512/    Bare-metal Intel AVX-512 VBMI/VNNI/VPOPCNTDQ CPU kernels & zero-VRAM Qwen2.5 engine
+cuda/sm86/     Bare-metal Ampere sm_86 PTX/SASS CUDA kernels & full-model Qwen2.5 engines (13 targets)
+cpu/avx512/    Bare-metal Intel AVX-512 VBMI/VNNI/VPOPCNTDQ CPU kernels & zero-VRAM Qwen2.5 engine (4 targets in make cpu, plus holosphere_v3_avx512 via holosphere_v3_avx512.mk)
+cpu/avx2/      Pure-C11 AVX2/FMA zero-division E_8 / WHT_8 & branchless Stage-1 unranking libraries (2 targets) + smoke tests in tests/
+cpu/rapl/      Pure-C11 Linux intel-rapl, Landauer CMOS, RDTSC & SMT concurrency microprobes (3 targets)
 lean/          20 pure-Init Lean 4.36.0 theorems certifying the 64 B proximity-horizon laws (Track S71)
 receipts/      Verified hardware benchmark, SASS (cuobjdump), and AVX-512 ISA inspection JSON receipts
+verify/        Host-side checks (rope RoPE-angle accuracy) & HoloSphere receipt verifiers (Python)
 ```
 
 ---
